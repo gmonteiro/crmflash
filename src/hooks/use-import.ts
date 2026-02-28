@@ -7,7 +7,7 @@ import { parseXlsx } from "@/lib/import/parse-xlsx"
 import { autoMapColumns } from "@/lib/import/map-columns"
 import { validateRow, type RowValidation } from "@/lib/import/validate-row"
 
-export type ImportStep = "upload" | "mapping" | "preview" | "executing" | "done"
+export type ImportStep = "upload" | "mapping" | "validating" | "preview" | "executing" | "done"
 
 export function useImport() {
   const [step, setStep] = useState<ImportStep>("upload")
@@ -16,6 +16,7 @@ export function useImport() {
   const [columnMapping, setColumnMapping] = useState<Record<string, string>>({})
   const [validations, setValidations] = useState<RowValidation[]>([])
   const [progress, setProgress] = useState(0)
+  const [validatingProgress, setValidatingProgress] = useState<{ current: number; total: number } | null>(null)
   const [results, setResults] = useState({ success: 0, errors: 0, total: 0 })
 
   async function handleFileSelect(f: File) {
@@ -32,11 +33,45 @@ export function useImport() {
   function confirmMapping() {
     if (!parseResult) return
 
-    const validationResults = parseResult.rows.map((row, idx) =>
-      validateRow(row, columnMapping, idx)
-    )
-    setValidations(validationResults)
-    setStep("preview")
+    const rows = parseResult.rows
+    const total = rows.length
+    const chunkSize = 500
+
+    // For small files, validate synchronously
+    if (total <= chunkSize) {
+      const validationResults = rows.map((row, idx) =>
+        validateRow(row, columnMapping, idx)
+      )
+      setValidations(validationResults)
+      setStep("preview")
+      return
+    }
+
+    // For large files, chunk validation to avoid freezing UI
+    setStep("validating")
+    setValidatingProgress({ current: 0, total })
+
+    const allResults: RowValidation[] = []
+    let offset = 0
+
+    function processChunk() {
+      const end = Math.min(offset + chunkSize, total)
+      for (let i = offset; i < end; i++) {
+        allResults.push(validateRow(rows[i], columnMapping, i))
+      }
+      offset = end
+      setValidatingProgress({ current: offset, total })
+
+      if (offset < total) {
+        setTimeout(processChunk, 0)
+      } else {
+        setValidations(allResults)
+        setValidatingProgress(null)
+        setStep("preview")
+      }
+    }
+
+    setTimeout(processChunk, 0)
   }
 
   async function executeImport() {
@@ -65,56 +100,88 @@ export function useImport() {
     let errorCount = 0
     const importErrors: Record<string, unknown>[] = []
 
-    // Batch insert, 50 at a time
     const validRows = validations.filter((v) => v.valid)
-    const batchSize = 50
+
+    // --- Pre-deduplicate companies ---
+    const companyMap = new Map<string, string>() // lowercase name -> id
+    const uniqueCompanyNames = [
+      ...new Set(
+        validRows
+          .map((v) => v.data.current_company?.trim())
+          .filter((name): name is string => !!name)
+      ),
+    ]
+
+    if (uniqueCompanyNames.length > 0) {
+      // Query existing companies in chunks of 100 (Supabase .in() limit)
+      const inChunkSize = 100
+      for (let i = 0; i < uniqueCompanyNames.length; i += inChunkSize) {
+        const chunk = uniqueCompanyNames.slice(i, i + inChunkSize)
+        const { data: existing } = await supabase
+          .from("companies")
+          .select("id, name")
+          .eq("user_id", user.id)
+          .in("name", chunk)
+
+        if (existing) {
+          for (const c of existing) {
+            companyMap.set(c.name.toLowerCase(), c.id)
+          }
+        }
+      }
+
+      // Find companies that need to be created
+      const missingNames = uniqueCompanyNames.filter(
+        (name) => !companyMap.has(name.toLowerCase())
+      )
+
+      if (missingNames.length > 0) {
+        // Batch insert missing companies in chunks of 500
+        const insertChunkSize = 500
+        for (let i = 0; i < missingNames.length; i += insertChunkSize) {
+          const chunk = missingNames.slice(i, i + insertChunkSize)
+          const { data: created } = await supabase
+            .from("companies")
+            .insert(chunk.map((name) => ({ name, user_id: user.id })))
+            .select("id, name")
+
+          if (created) {
+            for (const c of created) {
+              companyMap.set(c.name.toLowerCase(), c.id)
+            }
+          }
+        }
+      }
+    }
+
+    // --- Batch insert people, 500 at a time ---
+    const batchSize = 500
 
     for (let i = 0; i < validRows.length; i += batchSize) {
       const batch = validRows.slice(i, i + batchSize)
 
-      const inserts = await Promise.all(
-        batch.map(async (row) => {
-          const data = row.data
+      const inserts = batch.map((row) => {
+        const data = row.data
+        const companyId = data.current_company
+          ? companyMap.get(data.current_company.trim().toLowerCase()) ?? null
+          : null
 
-          // Auto-create company if current_company provided
-          let companyId: string | null = null
-          if (data.current_company) {
-            const { data: existing } = await supabase
-              .from("companies")
-              .select("id")
-              .eq("user_id", user.id)
-              .ilike("name", data.current_company)
-              .limit(1)
-
-            if (existing && existing.length > 0) {
-              companyId = existing[0].id
-            } else {
-              const { data: newCompany } = await supabase
-                .from("companies")
-                .insert({ name: data.current_company, user_id: user.id })
-                .select("id")
-                .single()
-              companyId = newCompany?.id ?? null
-            }
-          }
-
-          return {
-            user_id: user.id,
-            first_name: data.first_name || "Unknown",
-            last_name: data.last_name || "",
-            email: data.email || null,
-            phone: data.phone || null,
-            linkedin_url: data.linkedin_url || null,
-            current_title: data.current_title || null,
-            current_company: data.current_company || null,
-            company_id: companyId,
-            category: data.category || null,
-            notes: data.notes || null,
-            kanban_column_id: null,
-            kanban_position: null,
-          }
-        })
-      )
+        return {
+          user_id: user.id,
+          first_name: data.first_name || "Unknown",
+          last_name: data.last_name || "",
+          email: data.email || null,
+          phone: data.phone || null,
+          linkedin_url: data.linkedin_url || null,
+          current_title: data.current_title || null,
+          current_company: data.current_company || null,
+          company_id: companyId,
+          category: data.category || null,
+          notes: data.notes || null,
+          kanban_column_id: null,
+          kanban_position: null,
+        }
+      })
 
       const { error } = await supabase.from("people").insert(inserts)
 
@@ -156,6 +223,7 @@ export function useImport() {
     setColumnMapping({})
     setValidations([])
     setProgress(0)
+    setValidatingProgress(null)
     setResults({ success: 0, errors: 0, total: 0 })
   }
 
@@ -166,6 +234,7 @@ export function useImport() {
     columnMapping,
     setColumnMapping,
     validations,
+    validatingProgress,
     progress,
     results,
     handleFileSelect,

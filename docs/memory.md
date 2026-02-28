@@ -194,3 +194,24 @@ Log corrido de todas as decisoes, ajustes, bugs e mudancas de rumo.
 
 ### Build
 - `npm run build` passa com zero erros
+
+---
+
+## 2026-02-28 — Scale Import to Handle 4000+ Rows
+
+### Pre-deduplicate Companies
+- **Problema:** Cada row fazia SELECT + possivel INSERT para company = ~8000 queries para 4000 rows
+- **Solucao:** Coletar nomes unicos, 1 query com `.in()` (chunks de 100), 1 batch INSERT para missing
+- **Resultado:** ~2 queries no total (1 SELECT + 1 INSERT)
+
+### Batch Size 50 → 500
+- Supabase suporta ate 1000 rows por insert
+- 4000 rows agora faz 8 batches ao inves de 80
+
+### Chunked Validation
+- **Problema:** `confirmMapping()` validava 4000 rows sincronamente, travando UI
+- **Solucao:** Processar em chunks de 500 com `setTimeout(_, 0)` para yield ao UI thread
+- **Novo step:** `"validating"` entre `"mapping"` e `"preview"` com progress bar
+
+### Build
+- `npm run build` passa com zero erros (scale import)
