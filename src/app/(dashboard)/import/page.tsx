@@ -5,7 +5,6 @@ import { FileUploadZone } from "@/components/import/file-upload-zone"
 import { ColumnMapper } from "@/components/import/column-mapper"
 import { ImportPreview } from "@/components/import/import-preview"
 import { ImportProgress } from "@/components/import/import-progress"
-import { Progress } from "@/components/ui/progress"
 
 export default function ImportPage() {
   const {
@@ -14,7 +13,6 @@ export default function ImportPage() {
     columnMapping,
     setColumnMapping,
     validations,
-    validatingProgress,
     progress,
     results,
     handleFileSelect,
@@ -32,7 +30,7 @@ export default function ImportPage() {
         {["Upload", "Map Columns", "Preview", "Import"].map((label, idx) => {
           const stepMap = ["upload", "mapping", "preview", "executing"]
           const currentIdx = stepMap.indexOf(
-            step === "done" ? "executing" : step === "validating" ? "mapping" : step
+            step === "done" ? "executing" : step
           )
           const isActive = idx <= currentIdx
           return (
@@ -70,20 +68,6 @@ export default function ImportPage() {
           onConfirm={confirmMapping}
           sampleRow={parseResult.rows[0]}
         />
-      )}
-
-      {step === "validating" && validatingProgress && (
-        <div className="space-y-3 rounded-lg border p-6">
-          <p className="text-sm text-muted-foreground">
-            Validating {validatingProgress.current.toLocaleString()} of{" "}
-            {validatingProgress.total.toLocaleString()} rows...
-          </p>
-          <Progress
-            value={Math.round(
-              (validatingProgress.current / validatingProgress.total) * 100
-            )}
-          />
-        </div>
       )}
 
       {step === "preview" && (

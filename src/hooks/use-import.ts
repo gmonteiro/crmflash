@@ -7,7 +7,7 @@ import { parseXlsx } from "@/lib/import/parse-xlsx"
 import { autoMapColumns } from "@/lib/import/map-columns"
 import { validateRow, type RowValidation } from "@/lib/import/validate-row"
 
-export type ImportStep = "upload" | "mapping" | "validating" | "preview" | "executing" | "done"
+export type ImportStep = "upload" | "mapping" | "preview" | "executing" | "done"
 
 export function useImport() {
   const [step, setStep] = useState<ImportStep>("upload")
@@ -16,7 +16,6 @@ export function useImport() {
   const [columnMapping, setColumnMapping] = useState<Record<string, string>>({})
   const [validations, setValidations] = useState<RowValidation[]>([])
   const [progress, setProgress] = useState(0)
-  const [validatingProgress, setValidatingProgress] = useState<{ current: number; total: number } | null>(null)
   const [results, setResults] = useState({ success: 0, errors: 0, total: 0 })
 
   async function handleFileSelect(f: File) {
@@ -34,44 +33,14 @@ export function useImport() {
     if (!parseResult) return
 
     const rows = parseResult.rows
-    const total = rows.length
-    const chunkSize = 500
 
-    // For small files, validate synchronously
-    if (total <= chunkSize) {
-      const validationResults = rows.map((row, idx) =>
-        validateRow(row, columnMapping, idx)
-      )
-      setValidations(validationResults)
-      setStep("preview")
-      return
-    }
-
-    // For large files, chunk validation to avoid freezing UI
-    setStep("validating")
-    setValidatingProgress({ current: 0, total })
-
-    const allResults: RowValidation[] = []
-    let offset = 0
-
-    function processChunk() {
-      const end = Math.min(offset + chunkSize, total)
-      for (let i = offset; i < end; i++) {
-        allResults.push(validateRow(rows[i], columnMapping, i))
-      }
-      offset = end
-      setValidatingProgress({ current: offset, total })
-
-      if (offset < total) {
-        setTimeout(processChunk, 0)
-      } else {
-        setValidations(allResults)
-        setValidatingProgress(null)
-        setStep("preview")
-      }
-    }
-
-    setTimeout(processChunk, 0)
+    // validateRow is pure string ops + one regex — sub-millisecond per row.
+    // Even 100k rows finishes in < 200ms, so no chunking/setTimeout needed.
+    const validationResults = rows.map((row, idx) =>
+      validateRow(row, columnMapping, idx)
+    )
+    setValidations(validationResults)
+    setStep("preview")
   }
 
   async function executeImport() {
@@ -223,7 +192,6 @@ export function useImport() {
     setColumnMapping({})
     setValidations([])
     setProgress(0)
-    setValidatingProgress(null)
     setResults({ success: 0, errors: 0, total: 0 })
   }
 
@@ -234,7 +202,6 @@ export function useImport() {
     columnMapping,
     setColumnMapping,
     validations,
-    validatingProgress,
     progress,
     results,
     handleFileSelect,
