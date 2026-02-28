@@ -20,13 +20,19 @@ export default function SettingsPage() {
 
   useEffect(() => {
     const stored = localStorage.getItem("enrichProvider")
-    if (stored === "openai" || stored === "anthropic") setProvider(stored)
+    if (stored === "openai" || stored === "anthropic" || stored === "perplexity" || stored === "exa") setProvider(stored)
   }, [])
 
   function handleProviderChange(value: string) {
     setProvider(value)
     localStorage.setItem("enrichProvider", value)
-    toast.success(`Enrichment provider switched to ${value === "openai" ? "OpenAI GPT-4o-mini" : "Anthropic Claude Haiku"}`)
+    const labels: Record<string, string> = {
+      openai: "OpenAI GPT-4o-mini",
+      anthropic: "Anthropic Claude Haiku",
+      perplexity: "Perplexity Sonar",
+      exa: "Exa Answer",
+    }
+    toast.success(`Enrichment provider switched to ${labels[value] ?? value}`)
   }
 
   function handleSaveApiKey() {
@@ -85,12 +91,15 @@ export default function SettingsPage() {
               <SelectContent>
                 <SelectItem value="openai">OpenAI GPT-4o-mini — fast, ~$0.0002/company</SelectItem>
                 <SelectItem value="anthropic">Anthropic Claude Haiku — web search, ~$0.06/company</SelectItem>
+                <SelectItem value="perplexity">Perplexity Sonar — web search, ~$0.006/company</SelectItem>
+                <SelectItem value="exa">Exa Answer — web search, ~$0.005/company</SelectItem>
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              {provider === "openai"
-                ? "Uses model training data only. Cheapest option, great for most use cases."
-                : "Uses live web search for up-to-date results. More accurate but ~300x more expensive."}
+              {provider === "openai" && "Uses model training data only. Cheapest option, great for most use cases."}
+              {provider === "anthropic" && "Uses live web search for up-to-date results. More accurate but ~300x more expensive."}
+              {provider === "perplexity" && "Uses Perplexity Sonar with built-in web search. Good balance of cost and accuracy."}
+              {provider === "exa" && "Uses Exa Answer with web citations. Good balance of cost and accuracy."}
             </p>
           </div>
           <Separator />
@@ -121,8 +130,10 @@ export default function SettingsPage() {
           <div className="text-sm text-muted-foreground space-y-1">
             <p>
               Server-side keys are set via environment variables:{" "}
-              <code className="rounded bg-muted px-1 py-0.5">OPENAI_API_KEY</code> and{" "}
-              <code className="rounded bg-muted px-1 py-0.5">ANTHROPIC_API_KEY</code>
+              <code className="rounded bg-muted px-1 py-0.5">OPENAI_API_KEY</code>,{" "}
+              <code className="rounded bg-muted px-1 py-0.5">ANTHROPIC_API_KEY</code>,{" "}
+              <code className="rounded bg-muted px-1 py-0.5">PERPLEXITY_API_KEY</code>,{" "}
+              <code className="rounded bg-muted px-1 py-0.5">EXA_API_KEY</code>
             </p>
           </div>
         </CardContent>

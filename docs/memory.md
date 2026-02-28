@@ -153,3 +153,26 @@ Log corrido de todas as decisoes, ajustes, bugs e mudancas de rumo.
 ### Build
 - `npm run build` passa com zero erros
 - Dependencia `openai` adicionada ao package.json
+
+---
+
+## 2026-02-28 — Perplexity + Exa Providers & Overwrite on Re-enrich
+
+### Novos Providers
+- **Perplexity Sonar** (~$0.006/co): Reusa SDK `openai` com `baseURL: "https://api.perplexity.ai"`, modelo `sonar`, web search built-in
+- **Exa Answer** (~$0.005/co): SDK `exa-js`, usa `exa.answer()`, sem streaming (resposta inteira)
+- Ambos processam batch sequencialmente (web search por company)
+- Env vars: `PERPLEXITY_API_KEY`, `EXA_API_KEY`
+
+### Overwrite on Re-enrich
+- Removidas guards `&& !field` em `route.ts` e `batch/route.ts`
+- Agora re-enrich sobrescreve todos os campos com dados novos do AI
+- Fix bug: `if (enriched.notes && !person.current_title)` → `if (enriched.notes)`
+
+### Arquivos
+- Novo: `providers/perplexity.ts`, `providers/exa.ts`
+- Modificado: `index.ts` (factory), `route.ts`, `batch/route.ts`, `settings/page.tsx`
+- Dependencia: `exa-js` adicionada
+
+### Build
+- `npm run build` passa com zero erros

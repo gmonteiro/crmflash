@@ -13,12 +13,15 @@ function jsonResponse(data: Record<string, unknown>, status = 200) {
 
 function hasRequiredApiKey(provider: string): boolean {
   if (provider === "anthropic") return !!process.env.ANTHROPIC_API_KEY
+  if (provider === "perplexity") return !!process.env.PERPLEXITY_API_KEY
+  if (provider === "exa") return !!process.env.EXA_API_KEY
   return !!process.env.OPENAI_API_KEY
 }
 
 export async function POST(request: Request) {
   const { type, personId, companyId, provider: requestedProvider } = await request.json()
-  const provider = requestedProvider === "anthropic" ? "anthropic" : (requestedProvider === "openai" ? "openai" : undefined)
+  const validProviders = ["openai", "anthropic", "perplexity", "exa"] as const
+  const provider = validProviders.includes(requestedProvider) ? requestedProvider : undefined
 
   if (!hasRequiredApiKey(provider || process.env.ENRICH_PROVIDER || "openai")) {
     return jsonResponse({ error: "API key not configured. Check your API key for the selected provider." }, 500)
@@ -82,10 +85,10 @@ export async function POST(request: Request) {
         const update: Record<string, unknown> = {
           linkedin_enriched_at: new Date().toISOString(),
         }
-        if (enriched.current_title && !person.current_title) update.current_title = enriched.current_title
-        if (enriched.current_company && !person.current_company) update.current_company = enriched.current_company
-        if (enriched.linkedin_url && !person.linkedin_url) update.linkedin_url = enriched.linkedin_url
-        if (enriched.notes && !person.current_title) update.notes = enriched.notes
+        if (enriched.current_title) update.current_title = enriched.current_title
+        if (enriched.current_company) update.current_company = enriched.current_company
+        if (enriched.linkedin_url) update.linkedin_url = enriched.linkedin_url
+        if (enriched.notes) update.notes = enriched.notes
 
         if (enriched.current_company && !person.company_id) {
           const { data: existingCompany } = await supabase
@@ -160,14 +163,14 @@ export async function POST(request: Request) {
         )
 
         const update: Record<string, unknown> = {}
-        if (enriched.industry && !company.industry) update.industry = enriched.industry
-        if (enriched.description && !company.description) update.description = enriched.description
-        if (enriched.website && !company.website) update.website = enriched.website
-        if (enriched.domain && !company.domain) update.domain = enriched.domain
-        if (enriched.linkedin_url && !company.linkedin_url) update.linkedin_url = enriched.linkedin_url
-        if (enriched.employee_count && !company.employee_count) update.employee_count = enriched.employee_count
-        if (enriched.estimated_revenue && !company.estimated_revenue) update.estimated_revenue = enriched.estimated_revenue
-        if (enriched.size_tier && !company.size_tier) update.size_tier = enriched.size_tier
+        if (enriched.industry) update.industry = enriched.industry
+        if (enriched.description) update.description = enriched.description
+        if (enriched.website) update.website = enriched.website
+        if (enriched.domain) update.domain = enriched.domain
+        if (enriched.linkedin_url) update.linkedin_url = enriched.linkedin_url
+        if (enriched.employee_count) update.employee_count = enriched.employee_count
+        if (enriched.estimated_revenue) update.estimated_revenue = enriched.estimated_revenue
+        if (enriched.size_tier) update.size_tier = enriched.size_tier
 
         if (Object.keys(update).length > 0) {
           const { error } = await supabase

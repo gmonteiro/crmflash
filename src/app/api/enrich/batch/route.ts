@@ -13,12 +13,15 @@ function jsonResponse(data: Record<string, unknown>, status = 200) {
 
 function hasRequiredApiKey(provider: string): boolean {
   if (provider === "anthropic") return !!process.env.ANTHROPIC_API_KEY
+  if (provider === "perplexity") return !!process.env.PERPLEXITY_API_KEY
+  if (provider === "exa") return !!process.env.EXA_API_KEY
   return !!process.env.OPENAI_API_KEY
 }
 
 export async function POST(request: Request) {
   const { companyIds, provider: requestedProvider } = await request.json()
-  const provider = requestedProvider === "anthropic" ? "anthropic" : (requestedProvider === "openai" ? "openai" : undefined)
+  const validProviders = ["openai", "anthropic", "perplexity", "exa"] as const
+  const provider = validProviders.includes(requestedProvider) ? requestedProvider : undefined
 
   if (!hasRequiredApiKey(provider || process.env.ENRICH_PROVIDER || "openai")) {
     return jsonResponse({ error: "API key not configured" }, 500)
@@ -103,14 +106,14 @@ export async function POST(request: Request) {
           if (!company) return
 
           const update: Record<string, unknown> = {}
-          if (enrichResult.industry && !company.industry) update.industry = enrichResult.industry
-          if (enrichResult.description && !company.description) update.description = enrichResult.description
-          if (enrichResult.website && !company.website) update.website = enrichResult.website
-          if (enrichResult.domain && !company.domain) update.domain = enrichResult.domain
-          if (enrichResult.linkedin_url && !company.linkedin_url) update.linkedin_url = enrichResult.linkedin_url
-          if (enrichResult.employee_count && !company.employee_count) update.employee_count = enrichResult.employee_count
-          if (enrichResult.estimated_revenue && !company.estimated_revenue) update.estimated_revenue = enrichResult.estimated_revenue
-          if (enrichResult.size_tier && !company.size_tier) update.size_tier = enrichResult.size_tier
+          if (enrichResult.industry) update.industry = enrichResult.industry
+          if (enrichResult.description) update.description = enrichResult.description
+          if (enrichResult.website) update.website = enrichResult.website
+          if (enrichResult.domain) update.domain = enrichResult.domain
+          if (enrichResult.linkedin_url) update.linkedin_url = enrichResult.linkedin_url
+          if (enrichResult.employee_count) update.employee_count = enrichResult.employee_count
+          if (enrichResult.estimated_revenue) update.estimated_revenue = enrichResult.estimated_revenue
+          if (enrichResult.size_tier) update.size_tier = enrichResult.size_tier
 
           if (Object.keys(update).length > 0) {
             const { error } = await supabase

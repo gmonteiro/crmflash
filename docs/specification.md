@@ -150,10 +150,25 @@ CRM pessoal para gerenciar contatos profissionais (People), empresas (Companies)
 ### 6.2 Enriquecimento de Empresa
 - Botao "Enrich" no detail card da empresa
 - Chama `POST /api/enrich` com `{ type: "company", companyId }`
+- Backend busca people vinculados (nome, titulo, email, linkedin, current_company) para disambiguacao
 - Busca: industry, description, website, domain, linkedin_url, employee_count, estimated_revenue, size_tier
 - So sobrescreve campos vazios
 
-### 6.3 Configuracao
+### 6.3 Bulk Enrich
+- Botao "Enrich All" (icone Sparkles) na pagina /companies
+- Busca TODAS as empresas (nao paginado), filtra unenriched (todos os 5 campos-chave null)
+- Dialog com progress bar, nome atual, contadores sucesso/falha, cancel
+- Processa sequencialmente via `useBulkEnrich` hook
+- Apos completar, refaz fetch da tabela
+
+### 6.4 Streaming / Timeout
+- API route retorna streaming response (TransformStream)
+- Anthropic SDK usa `client.messages.stream()` com onProgress callback
+- Cada token gera byte keepalive (espaco) para manter conexao viva no Vercel
+- Client parseia response: trim + indexOf para extrair JSON final
+- `maxDuration = 60` como fallback para Vercel Pro
+
+### 6.5 Configuracao
 - `ANTHROPIC_API_KEY` em `.env.local`
 - Settings page mostra campo para referencia (nao armazena server-side)
 

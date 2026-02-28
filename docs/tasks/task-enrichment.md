@@ -74,3 +74,31 @@
 - **Arquivo:** `.env.local`
 - **Descricao:** Trocou `PROXYCURL_API_KEY=` por `ANTHROPIC_API_KEY=`
 - **Criterio:** .env.local tem a key correta
+
+### Task 6.11: Bulk Enrich Companies
+- **Status:** DONE
+- **Arquivos:** `src/hooks/use-enrich.ts`, `src/app/(dashboard)/companies/page.tsx`
+- **Descricao:** Hook `useBulkEnrich` + botao "Enrich All" + dialog com progress
+- **Criterio:** Enriquece todas empresas unenriched sequencialmente com UI de progresso
+
+### Task 6.12: Streaming Response
+- **Status:** DONE
+- **Arquivos:** `src/lib/enrich/claude-enrich.ts`, `src/app/api/enrich/route.ts`, `src/hooks/use-enrich.ts`
+- **Descricao:** API usa TransformStream com keepalive bytes para evitar timeout do Vercel
+- **Criterio:** Enrichments nao dão timeout no Vercel free tier
+
+### Task 6.13: Disambiguacao com People Context
+- **Status:** DONE
+- **Arquivos:** `src/lib/enrich/claude-enrich.ts`, `src/app/api/enrich/route.ts`
+- **Descricao:** Passa dados dos people vinculados no prompt para resolver nomes ambiguos
+- **Criterio:** "Flash" resolve para flashapp.com.br (brasileiro) e nao flashparking.com
+
+### Task 6.14: Reducao de Custo
+- **Status:** PENDING
+- **Descricao:** Custo atual ~$0.06/enrichment e inviavel. Avaliar: batching, modelo mais barato (OpenAI GPT-4o-mini), limitar web searches, ou APIs gratuitas
+- **Criterio:** Custo por enrichment < $0.01
+
+### Task 6.15: Reasoning Window
+- **Status:** PENDING
+- **Descricao:** Mostrar log/trace do que o AI esta fazendo durante enrichment (queries de busca, resultados)
+- **Criterio:** UI mostra progresso detalhado durante enrich
