@@ -22,6 +22,7 @@ interface CompanyHints {
   name: string
   domain?: string | null
   website?: string | null
+  people?: { name: string; title?: string | null; email?: string | null }[]
 }
 
 interface CompanyEnrichResult {
@@ -103,6 +104,17 @@ export async function enrichCompanyWithAI(hints: CompanyHints): Promise<CompanyE
   if (hints.domain) parts.push(hints.domain)
   if (hints.website) parts.push(hints.website)
 
+  let peopleContext = ""
+  if (hints.people && hints.people.length > 0) {
+    const lines = hints.people.map((p) => {
+      const details = [p.name]
+      if (p.title) details.push(p.title)
+      if (p.email) details.push(p.email)
+      return `- ${details.join(", ")}`
+    })
+    peopleContext = `\n\nKnown employees at this company (use this to disambiguate which "${hints.name}" is the correct one):\n${lines.join("\n")}`
+  }
+
   const response = await client.messages.create({
     model: "claude-haiku-4-5",
     max_tokens: 1024,
@@ -112,7 +124,7 @@ export async function enrichCompanyWithAI(hints: CompanyHints): Promise<CompanyE
     messages: [
       {
         role: "user",
-        content: `Search the web for information about this company: ${parts.join(", ")}.
+        content: `Search the web for information about this company: ${parts.join(", ")}.${peopleContext}
 
 Find:
 - Industry

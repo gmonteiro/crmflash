@@ -99,10 +99,17 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Company not found" }, { status: 404 })
       }
 
+      const { data: people } = await supabase
+        .from("people")
+        .select("full_name, current_title, email")
+        .eq("company_id", companyId)
+        .limit(10)
+
       const enriched = await enrichCompanyWithAI({
         name: company.name,
         domain: company.domain,
         website: company.website,
+        people: people?.map((p) => ({ name: p.full_name, title: p.current_title, email: p.email })),
       })
 
       // Only overwrite empty fields
