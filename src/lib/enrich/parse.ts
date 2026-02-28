@@ -1,5 +1,9 @@
 export function stripCiteTags(text: string): string {
-  return text.replace(/<\/?cite[^>]*>/g, "")
+  return text
+    .replace(/<\/?cite[^>]*>/g, "")
+    .replace(/\[(\d+)\]\(https?:\/\/[^)]*\)/g, "")  // [1](url)
+    .replace(/\[(\d+)\]/g, "")                        // [1], [2]
+    .replace(/【[^】]*】/g, "")                         // 【citation】
 }
 
 export function extractJson<T>(text: string): T | null {

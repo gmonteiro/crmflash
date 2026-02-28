@@ -43,6 +43,8 @@ async function streamChat(
   return text
 }
 
+const SYSTEM_MSG = "You are a data extraction API. You MUST respond with ONLY a valid JSON object. No markdown formatting, no code fences, no explanations, no citations, no text before or after the JSON. Just the raw JSON object."
+
 export class PerplexityEnrichProvider implements EnrichProvider {
   async enrichPerson(
     hints: PersonHints,
@@ -50,7 +52,10 @@ export class PerplexityEnrichProvider implements EnrichProvider {
   ): Promise<PersonEnrichResult> {
     const prompt = buildPersonPrompt(hints)
     const text = await streamChat(
-      [{ role: "user", content: prompt }],
+      [
+        { role: "system", content: SYSTEM_MSG },
+        { role: "user", content: prompt },
+      ],
       callbacks,
     )
     return extractJson<PersonEnrichResult>(text) ?? {}
@@ -62,7 +67,10 @@ export class PerplexityEnrichProvider implements EnrichProvider {
   ): Promise<CompanyEnrichResult> {
     const prompt = buildCompanyPrompt(hints)
     const text = await streamChat(
-      [{ role: "user", content: prompt }],
+      [
+        { role: "system", content: SYSTEM_MSG },
+        { role: "user", content: prompt },
+      ],
       callbacks,
     )
     return extractJson<CompanyEnrichResult>(text) ?? {}
