@@ -81,7 +81,7 @@ export function CompanyTable({
             rel="noopener noreferrer"
             className="text-sm text-primary hover:underline"
           >
-            {row.original.domain || new URL(row.original.website).hostname}
+            {row.original.domain || (() => { try { return new URL(row.original.website!).hostname } catch { return row.original.website } })()}
           </a>
         ) : null,
     },
