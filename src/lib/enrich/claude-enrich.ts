@@ -42,14 +42,12 @@ function stripCiteTags(text: string): string {
 
 function extractJson<T>(text: string): T | null {
   const clean = stripCiteTags(text)
-  // Try to find JSON in code blocks first
   const codeBlockMatch = clean.match(/```(?:json)?\s*([\s\S]*?)```/)
   if (codeBlockMatch) {
     try {
       return JSON.parse(codeBlockMatch[1].trim())
     } catch { /* fall through */ }
   }
-  // Try to find JSON object directly
   const jsonMatch = clean.match(/\{[\s\S]*\}/)
   if (jsonMatch) {
     try {
@@ -59,29 +57,43 @@ function extractJson<T>(text: string): T | null {
   return null
 }
 
-function getTextFromResponse(response: Anthropic.Message): string {
-  return response.content
-    .filter((block): block is Anthropic.TextBlock => block.type === "text")
-    .map((block) => block.text)
-    .join("\n")
+interface StreamOptions {
+  onProgress?: () => void
 }
 
-export async function enrichPersonWithAI(hints: PersonHints): Promise<PersonEnrichResult> {
+async function streamMessage(
+  params: Anthropic.MessageCreateParams,
+  opts?: StreamOptions,
+): Promise<Anthropic.Message> {
+  const stream = client.messages.stream(params)
+
+  stream.on("text", () => {
+    opts?.onProgress?.()
+  })
+
+  return stream.finalMessage()
+}
+
+export async function enrichPersonWithAI(
+  hints: PersonHints,
+  opts?: StreamOptions,
+): Promise<PersonEnrichResult> {
   const parts = [hints.full_name]
   if (hints.current_company) parts.push(hints.current_company)
   if (hints.current_title) parts.push(hints.current_title)
   if (hints.email) parts.push(hints.email)
 
-  const response = await client.messages.create({
-    model: "claude-haiku-4-5",
-    max_tokens: 1024,
-    tools: [
-      { type: "web_search_20250305" as const, name: "web_search" },
-    ],
-    messages: [
-      {
-        role: "user",
-        content: `Search the web for professional information about this person: ${parts.join(", ")}.
+  const response = await streamMessage(
+    {
+      model: "claude-haiku-4-5",
+      max_tokens: 1024,
+      tools: [
+        { type: "web_search_20250305" as const, name: "web_search" },
+      ],
+      messages: [
+        {
+          role: "user",
+          content: `Search the web for professional information about this person: ${parts.join(", ")}.
 
 Find their:
 - Current job title
@@ -96,15 +108,23 @@ Return ONLY a JSON object with these fields (omit fields you can't find):
   "linkedin_url": "...",
   "notes": "..."
 }`,
-      },
-    ],
-  })
+        },
+      ],
+    },
+    opts,
+  )
 
-  const text = getTextFromResponse(response)
+  const text = response.content
+    .filter((block): block is Anthropic.TextBlock => block.type === "text")
+    .map((block) => block.text)
+    .join("\n")
   return extractJson<PersonEnrichResult>(text) ?? {}
 }
 
-export async function enrichCompanyWithAI(hints: CompanyHints): Promise<CompanyEnrichResult> {
+export async function enrichCompanyWithAI(
+  hints: CompanyHints,
+  opts?: StreamOptions,
+): Promise<CompanyEnrichResult> {
   const parts = [hints.name]
   if (hints.domain) parts.push(hints.domain)
   if (hints.website) parts.push(hints.website)
@@ -122,16 +142,17 @@ export async function enrichCompanyWithAI(hints: CompanyHints): Promise<CompanyE
     peopleContext = `\n\nIMPORTANT — Known employees at this company. Use their names, nationalities, email domains, LinkedIn profiles, and listed employers to identify the EXACT correct company. For example, Brazilian employee names indicate a Brazilian company:\n${lines.join("\n")}`
   }
 
-  const response = await client.messages.create({
-    model: "claude-haiku-4-5",
-    max_tokens: 1024,
-    tools: [
-      { type: "web_search_20250305" as const, name: "web_search" },
-    ],
-    messages: [
-      {
-        role: "user",
-        content: `Search the web for information about this company: ${parts.join(", ")}.${peopleContext}
+  const response = await streamMessage(
+    {
+      model: "claude-haiku-4-5",
+      max_tokens: 1024,
+      tools: [
+        { type: "web_search_20250305" as const, name: "web_search" },
+      ],
+      messages: [
+        {
+          role: "user",
+          content: `Search the web for information about this company: ${parts.join(", ")}.${peopleContext}
 
 Find:
 - Industry
@@ -153,10 +174,15 @@ Return ONLY a JSON object with these fields (omit fields you can't find):
   "estimated_revenue": 0,
   "size_tier": "..."
 }`,
-      },
-    ],
-  })
+        },
+      ],
+    },
+    opts,
+  )
 
-  const text = getTextFromResponse(response)
+  const text = response.content
+    .filter((block): block is Anthropic.TextBlock => block.type === "text")
+    .map((block) => block.text)
+    .join("\n")
   return extractJson<CompanyEnrichResult>(text) ?? {}
 }

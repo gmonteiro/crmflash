@@ -2,6 +2,20 @@
 
 import { useState, useRef, useCallback } from "react"
 
+async function parseStreamResponse(res: Response): Promise<boolean> {
+  const text = await res.text()
+  const jsonStr = text.trim()
+  // The stream is: keepalive spaces + final JSON object
+  const match = jsonStr.match(/\{[^{}]*\}$/)
+  if (!match) return false
+  try {
+    const data = JSON.parse(match[0])
+    return !!data.success
+  } catch {
+    return false
+  }
+}
+
 export function useEnrich() {
   const [loading, setLoading] = useState(false)
 
@@ -13,13 +27,7 @@ export function useEnrich() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "person", personId }),
       })
-
-      if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error || "Enrichment failed")
-      }
-
-      return true
+      return await parseStreamResponse(res)
     } catch {
       return false
     } finally {
@@ -35,13 +43,7 @@ export function useEnrich() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "company", companyId }),
       })
-
-      if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error || "Enrichment failed")
-      }
-
-      return true
+      return await parseStreamResponse(res)
     } catch {
       return false
     } finally {
@@ -107,7 +109,8 @@ export function useBulkEnrich() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ type: "company", companyId: item.id }),
         })
-        if (res.ok) succeeded++
+        const success = await parseStreamResponse(res)
+        if (success) succeeded++
         else failed++
       } catch {
         failed++
