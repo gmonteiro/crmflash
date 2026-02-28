@@ -11,17 +11,17 @@ function jsonResponse(data: Record<string, unknown>, status = 200) {
   })
 }
 
-function hasRequiredApiKey(): boolean {
-  const provider = process.env.ENRICH_PROVIDER || "openai"
+function hasRequiredApiKey(provider: string): boolean {
   if (provider === "anthropic") return !!process.env.ANTHROPIC_API_KEY
   return !!process.env.OPENAI_API_KEY
 }
 
 export async function POST(request: Request) {
-  const { type, personId, companyId } = await request.json()
+  const { type, personId, companyId, provider: requestedProvider } = await request.json()
+  const provider = requestedProvider === "anthropic" ? "anthropic" : (requestedProvider === "openai" ? "openai" : undefined)
 
-  if (!hasRequiredApiKey()) {
-    return jsonResponse({ error: "API key not configured. Check your ENRICH_PROVIDER and corresponding API key." }, 500)
+  if (!hasRequiredApiKey(provider || process.env.ENRICH_PROVIDER || "openai")) {
+    return jsonResponse({ error: "API key not configured. Check your API key for the selected provider." }, 500)
   }
 
   const supabase = await createServerSupabaseClient()
@@ -47,7 +47,7 @@ export async function POST(request: Request) {
   const sendEvent = (event: EnrichSSEEvent) =>
     writer.write(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
 
-  const provider = getEnrichProvider()
+  const enrichProvider = getEnrichProvider(provider)
 
   ;(async () => {
     try {
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
           return
         }
 
-        const enriched = await provider.enrichPerson(
+        const enriched = await enrichProvider.enrichPerson(
           {
             full_name: person.full_name,
             email: person.email,
@@ -140,7 +140,7 @@ export async function POST(request: Request) {
           .eq("company_id", companyId)
           .limit(10)
 
-        const enriched = await provider.enrichCompany(
+        const enriched = await enrichProvider.enrichCompany(
           {
             name: company.name,
             domain: company.domain,

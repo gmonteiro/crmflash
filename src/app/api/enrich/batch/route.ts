@@ -11,16 +11,16 @@ function jsonResponse(data: Record<string, unknown>, status = 200) {
   })
 }
 
-function hasRequiredApiKey(): boolean {
-  const provider = process.env.ENRICH_PROVIDER || "openai"
+function hasRequiredApiKey(provider: string): boolean {
   if (provider === "anthropic") return !!process.env.ANTHROPIC_API_KEY
   return !!process.env.OPENAI_API_KEY
 }
 
 export async function POST(request: Request) {
-  const { companyIds } = await request.json()
+  const { companyIds, provider: requestedProvider } = await request.json()
+  const provider = requestedProvider === "anthropic" ? "anthropic" : (requestedProvider === "openai" ? "openai" : undefined)
 
-  if (!hasRequiredApiKey()) {
+  if (!hasRequiredApiKey(provider || process.env.ENRICH_PROVIDER || "openai")) {
     return jsonResponse({ error: "API key not configured" }, 500)
   }
 
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
   const sendEvent = (event: EnrichSSEEvent) =>
     writer.write(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
 
-  const provider = getEnrichProvider()
+  const enrichProvider = getEnrichProvider(provider)
 
   ;(async () => {
     let succeeded = 0
@@ -95,7 +95,7 @@ export async function POST(request: Request) {
       })
 
       // Call provider batch enrichment
-      const results = await provider.enrichCompaniesBatch(batchInput, {
+      const results = await enrichProvider.enrichCompaniesBatch(batchInput, {
         onReasoning: (chunk) => sendEvent({ type: "reasoning", text: chunk }),
         onBatchItem: async (id, enrichResult) => {
           // Save to DB as each result comes in

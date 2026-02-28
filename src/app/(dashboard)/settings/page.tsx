@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -16,10 +16,20 @@ export default function SettingsPage() {
   const { theme, setTheme } = useTheme()
   const [apiKey, setApiKey] = useState("")
   const [saved, setSaved] = useState(false)
+  const [provider, setProvider] = useState("openai")
+
+  useEffect(() => {
+    const stored = localStorage.getItem("enrichProvider")
+    if (stored === "openai" || stored === "anthropic") setProvider(stored)
+  }, [])
+
+  function handleProviderChange(value: string) {
+    setProvider(value)
+    localStorage.setItem("enrichProvider", value)
+    toast.success(`Enrichment provider switched to ${value === "openai" ? "OpenAI GPT-4o-mini" : "Anthropic Claude Haiku"}`)
+  }
 
   function handleSaveApiKey() {
-    // In a real app, this would be stored securely server-side
-    // For now we show it as a UI pattern
     if (apiKey) {
       toast.success("API key saved. Set it in .env.local for server-side access.")
       setSaved(true)
@@ -62,10 +72,28 @@ export default function SettingsPage() {
             AI Enrichment Provider
           </CardTitle>
           <CardDescription>
-            Configure AI provider for data enrichment
+            Choose which AI model to use for data enrichment
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>Provider</Label>
+            <Select value={provider} onValueChange={handleProviderChange}>
+              <SelectTrigger className="w-[300px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="openai">OpenAI GPT-4o-mini — fast, ~$0.0002/company</SelectItem>
+                <SelectItem value="anthropic">Anthropic Claude Haiku — web search, ~$0.06/company</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {provider === "openai"
+                ? "Uses model training data only. Cheapest option, great for most use cases."
+                : "Uses live web search for up-to-date results. More accurate but ~300x more expensive."}
+            </p>
+          </div>
+          <Separator />
           <div className="space-y-2">
             <Label htmlFor="api-key" className="flex items-center gap-2">
               <Key className="h-4 w-4" />
@@ -90,22 +118,12 @@ export default function SettingsPage() {
             )}
           </div>
           <Separator />
-          <div className="text-sm text-muted-foreground space-y-2">
-            <p className="font-medium text-foreground">Provider Configuration</p>
+          <div className="text-sm text-muted-foreground space-y-1">
             <p>
-              Set <code className="rounded bg-muted px-1 py-0.5">ENRICH_PROVIDER</code> in{" "}
-              <code className="rounded bg-muted px-1 py-0.5">.env.local</code> to choose your provider:
+              Server-side keys are set via environment variables:{" "}
+              <code className="rounded bg-muted px-1 py-0.5">OPENAI_API_KEY</code> and{" "}
+              <code className="rounded bg-muted px-1 py-0.5">ANTHROPIC_API_KEY</code>
             </p>
-            <ul className="list-disc pl-5 space-y-1">
-              <li>
-                <code className="rounded bg-muted px-1 py-0.5">openai</code> (default) — Uses GPT-4o-mini. Set{" "}
-                <code className="rounded bg-muted px-1 py-0.5">OPENAI_API_KEY</code>. Cheapest option (~$0.0002/company).
-              </li>
-              <li>
-                <code className="rounded bg-muted px-1 py-0.5">anthropic</code> — Uses Claude Haiku + web search. Set{" "}
-                <code className="rounded bg-muted px-1 py-0.5">ANTHROPIC_API_KEY</code>. More accurate (~$0.06/company).
-              </li>
-            </ul>
           </div>
         </CardContent>
       </Card>

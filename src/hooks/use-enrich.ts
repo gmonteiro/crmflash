@@ -3,6 +3,11 @@
 import { useState, useRef, useCallback } from "react"
 import type { EnrichSSEEvent } from "@/lib/enrich/types"
 
+function getSelectedProvider(): string | undefined {
+  if (typeof window === "undefined") return undefined
+  return localStorage.getItem("enrichProvider") || undefined
+}
+
 async function parseSSEStream(
   res: Response,
   onEvent: (event: EnrichSSEEvent) => void,
@@ -48,7 +53,7 @@ export function useEnrich() {
       const res = await fetch("/api/enrich", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "person", personId }),
+        body: JSON.stringify({ type: "person", personId, provider: getSelectedProvider() }),
       })
       return await parseSSEStream(res, (event) => {
         if (event.type === "reasoning") {
@@ -69,7 +74,7 @@ export function useEnrich() {
       const res = await fetch("/api/enrich", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "company", companyId }),
+        body: JSON.stringify({ type: "company", companyId, provider: getSelectedProvider() }),
       })
       return await parseSSEStream(res, (event) => {
         if (event.type === "reasoning") {
@@ -145,7 +150,7 @@ export function useBulkEnrich() {
         const res = await fetch("/api/enrich/batch", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ companyIds: batch.map((b) => b.id) }),
+          body: JSON.stringify({ companyIds: batch.map((b) => b.id), provider: getSelectedProvider() }),
         })
 
         await parseSSEStream(res, (event) => {

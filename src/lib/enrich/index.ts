@@ -1,7 +1,7 @@
 import type { EnrichProvider } from "./types"
 
-export function getEnrichProvider(): EnrichProvider {
-  const provider = process.env.ENRICH_PROVIDER || "openai"
+export function getEnrichProvider(override?: string): EnrichProvider {
+  const provider = override || process.env.ENRICH_PROVIDER || "openai"
 
   if (provider === "anthropic") {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
