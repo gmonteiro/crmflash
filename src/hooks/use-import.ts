@@ -39,27 +39,21 @@ export function useImport() {
       validateRow(row, columnMapping, idx)
     )
 
-    // Intra-file dedup: by email first, then by name+company for rows without email
-    const seenEmails = new Set<string>()
-    const seenNames = new Set<string>()
+    // Intra-file dedup by name + title + company (primary key for all rows)
+    const seenKeys = new Set<string>()
     for (const v of validationResults) {
       if (!v.valid) continue
-      const email = v.data.email?.toLowerCase()
-      if (email) {
-        if (seenEmails.has(email)) {
-          v.valid = false
-          v.errors.push(`Duplicate email "${v.data.email}" in file`)
-        } else {
-          seenEmails.add(email)
-        }
+      const key = [
+        (v.data.first_name || ""),
+        (v.data.last_name || ""),
+        (v.data.current_title || ""),
+        (v.data.current_company || ""),
+      ].map((s) => s.toLowerCase().trim()).join("|")
+      if (seenKeys.has(key)) {
+        v.valid = false
+        v.errors.push(`Duplicate: "${v.data.first_name} ${v.data.last_name}" already appears in this file`)
       } else {
-        const nameKey = `${(v.data.first_name || "").toLowerCase()}|${(v.data.last_name || "").toLowerCase()}|${(v.data.current_company || "").toLowerCase()}`
-        if (seenNames.has(nameKey)) {
-          v.valid = false
-          v.errors.push(`Duplicate person "${v.data.first_name} ${v.data.last_name}" in file`)
-        } else {
-          seenNames.add(nameKey)
-        }
+        seenKeys.add(key)
       }
     }
 
@@ -96,35 +90,37 @@ export function useImport() {
     const validRows = validations.filter((v) => v.valid)
 
     // --- Database dedup: skip people that already exist ---
-    // Fetch all existing people (email + name+company) for this user
-    const existingEmails = new Set<string>()
-    const existingNames = new Set<string>()
+    // Key: name + title + company (case-insensitive)
+    const existingKeys = new Set<string>()
     const { data: allPeople } = await supabase
       .from("people")
-      .select("email, first_name, last_name, current_company")
+      .select("first_name, last_name, current_title, current_company")
       .eq("user_id", user.id)
+      .limit(50000)
 
     if (allPeople) {
       for (const p of allPeople) {
-        if (p.email) existingEmails.add(p.email.toLowerCase())
-        const nameKey = `${(p.first_name || "").toLowerCase()}|${(p.last_name || "").toLowerCase()}|${(p.current_company || "").toLowerCase()}`
-        existingNames.add(nameKey)
+        const key = [
+          (p.first_name || ""),
+          (p.last_name || ""),
+          (p.current_title || ""),
+          (p.current_company || ""),
+        ].map((s) => s.toLowerCase().trim()).join("|")
+        existingKeys.add(key)
       }
     }
 
     let skippedCount = 0
     const deduplicatedRows = validRows.filter((v) => {
-      const email = v.data.email?.toLowerCase()
-      if (email && existingEmails.has(email)) {
+      const key = [
+        (v.data.first_name || ""),
+        (v.data.last_name || ""),
+        (v.data.current_title || ""),
+        (v.data.current_company || ""),
+      ].map((s) => s.toLowerCase().trim()).join("|")
+      if (existingKeys.has(key)) {
         skippedCount++
         return false
-      }
-      if (!email) {
-        const nameKey = `${(v.data.first_name || "").toLowerCase()}|${(v.data.last_name || "").toLowerCase()}|${(v.data.current_company || "").toLowerCase()}`
-        if (existingNames.has(nameKey)) {
-          skippedCount++
-          return false
-        }
       }
       return true
     })
@@ -137,6 +133,7 @@ export function useImport() {
       .from("companies")
       .select("id, name")
       .eq("user_id", user.id)
+      .limit(50000)
 
     if (allCompanies) {
       for (const c of allCompanies) {
