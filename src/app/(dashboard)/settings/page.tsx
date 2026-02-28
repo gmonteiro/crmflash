@@ -21,7 +21,7 @@ export default function SettingsPage() {
     // In a real app, this would be stored securely server-side
     // For now we show it as a UI pattern
     if (apiKey) {
-      toast.success("API key saved. Set ANTHROPIC_API_KEY in .env.local for server-side access.")
+      toast.success("API key saved. Set it in .env.local for server-side access.")
       setSaved(true)
     }
   }
@@ -59,25 +59,25 @@ export default function SettingsPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5" />
-            AI Enrichment
+            AI Enrichment Provider
           </CardTitle>
           <CardDescription>
-            Configure Claude API for AI-powered data enrichment
+            Configure AI provider for data enrichment
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="anthropic-key" className="flex items-center gap-2">
+            <Label htmlFor="api-key" className="flex items-center gap-2">
               <Key className="h-4 w-4" />
-              Anthropic API Key
+              API Key
             </Label>
             <div className="flex gap-2">
               <Input
-                id="anthropic-key"
+                id="api-key"
                 type="password"
                 value={apiKey}
                 onChange={(e) => { setApiKey(e.target.value); setSaved(false) }}
-                placeholder="Enter your Anthropic API key"
+                placeholder="Enter your API key"
               />
               <Button onClick={handleSaveApiKey} disabled={!apiKey}>
                 Save
@@ -90,9 +90,22 @@ export default function SettingsPage() {
             )}
           </div>
           <Separator />
-          <div className="text-sm text-muted-foreground space-y-1">
-            <p>Get your API key from <span className="font-medium">console.anthropic.com</span></p>
-            <p>Set the <code className="rounded bg-muted px-1 py-0.5">ANTHROPIC_API_KEY</code> environment variable in your <code className="rounded bg-muted px-1 py-0.5">.env.local</code> file for server-side enrichment.</p>
+          <div className="text-sm text-muted-foreground space-y-2">
+            <p className="font-medium text-foreground">Provider Configuration</p>
+            <p>
+              Set <code className="rounded bg-muted px-1 py-0.5">ENRICH_PROVIDER</code> in{" "}
+              <code className="rounded bg-muted px-1 py-0.5">.env.local</code> to choose your provider:
+            </p>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>
+                <code className="rounded bg-muted px-1 py-0.5">openai</code> (default) — Uses GPT-4o-mini. Set{" "}
+                <code className="rounded bg-muted px-1 py-0.5">OPENAI_API_KEY</code>. Cheapest option (~$0.0002/company).
+              </li>
+              <li>
+                <code className="rounded bg-muted px-1 py-0.5">anthropic</code> — Uses Claude Haiku + web search. Set{" "}
+                <code className="rounded bg-muted px-1 py-0.5">ANTHROPIC_API_KEY</code>. More accurate (~$0.06/company).
+              </li>
+            </ul>
           </div>
         </CardContent>
       </Card>

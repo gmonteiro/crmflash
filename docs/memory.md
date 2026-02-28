@@ -61,6 +61,47 @@ Log corrido de todas as decisoes, ajustes, bugs e mudancas de rumo.
 
 ---
 
+## 2026-02-28 — Bulk Enrich + Bug Fixes + Streaming
+
+### Bulk Enrich Companies
+- **Feature:** Botao "Enrich All" na pagina /companies enriquece todas as empresas nao-enriquecidas sequencialmente
+- **Hook:** `useBulkEnrich` em use-enrich.ts — loop sequencial com cancel via ref, tracking de running/current/total/succeeded/failed
+- **UI:** Dialog com Progress bar, nome da empresa atual, contadores de sucesso/falha, botao Cancel/Done
+- **Heuristica:** Empresa e "unenriched" se TODOS os campos industry, description, employee_count, estimated_revenue, size_tier sao null
+
+### Bug Fix: Invalid URL crash na CompanyTable
+- `new URL(website)` crashava quando AI retornava website sem protocolo (ex: "example.com")
+- Fix: try-catch com fallback para string raw
+
+### Bug Fix: getTextFromResponse so pegava primeiro text block
+- Com web_search, response do Anthropic tem multiplos content blocks (tool_use, tool_result, text)
+- O JSON ficava no ULTIMO text block, mas funcao retornava so o primeiro
+- Fix: concatenar TODOS os text blocks
+
+### Bug Fix: Disambiguacao de empresas com nomes genericos
+- Empresas como "Flash" e "Linx" retornavam dados da empresa errada
+- Fix: Passar dados dos people vinculados (nome, titulo, email, linkedin, current_company) no prompt
+- Prompt enfatiza usar nacionalidade, dominio de email, e LinkedIn para identificar empresa correta
+
+### Bug Fix: Tags <cite> no description
+- AI retornava `<cite index="...">texto</cite>` nos campos de texto
+- Fix: `stripCiteTags()` remove tags antes de extrair JSON
+
+### Bug Fix: parseStreamResponse regex nao parseava JSON aninhado
+- Regex `\{[^{}]*\}$` nao matchava `{"success":true,"enriched":{"industry":"..."}}` (chaves aninhadas)
+- Fix: usar `indexOf("{")` + `JSON.parse()` direto
+
+### Streaming Response para bypass de timeout do Vercel
+- **Problema:** Vercel free tier tem timeout de 10s; enrichment com web_search leva 10-20s
+- **Solucao:** API retorna TransformStream. Cada token do Anthropic envia byte keepalive (espaco). JSON final enviado no fim
+- **Impacto:** `claude-enrich.ts` usa `client.messages.stream()` com callback `onProgress`; `route.ts` usa TransformStream; `use-enrich.ts` parseia response com trim + indexOf
+
+### Custo Alto — Pendente
+- ~$0.06/enrichment com web_search e inaceitavel para uso em escala
+- Proximo passo: batching, limitar web search uses, e/ou modelo mais barato
+
+---
+
 ## 2026-02-28 — SQL Migration Executada
 
 ### Migration
@@ -70,3 +111,45 @@ Log corrido de todas as decisoes, ajustes, bugs e mudancas de rumo.
 - Segundo run: **Success** — todas as 6 tabelas criadas com RLS ativo
 - Tabelas confirmadas no Table Editor: companies, import_history, kanban_columns, people, people_tags, tags
 - Triggers, indexes (pg_trgm) e function `create_default_kanban_columns` criados
+
+---
+
+## 2026-02-28 — Multi-Provider Enrichment + Reasoning Window
+
+### Provider Abstraction
+- **Motivo:** Custo de $0.06/enrichment com Anthropic+web_search inaceitavel
+- **Solucao:** Arquitetura multi-provider com factory pattern
+- **Novo default:** OpenAI GPT-4o-mini (~$0.0002/company, 300x mais barato)
+- **Fallback:** Anthropic Haiku + web_search mantido para quem precisa de dados atualizados
+- **Env var:** `ENRICH_PROVIDER=openai|anthropic` (default: openai)
+
+### Estrutura de Arquivos
+- Deletado `claude-enrich.ts` (monolitico)
+- Novo: `types.ts`, `parse.ts`, `prompts.ts` (extraidos)
+- Novo: `providers/openai.ts`, `providers/anthropic.ts` (implementacoes)
+- Novo: `index.ts` (factory `getEnrichProvider()`)
+
+### Batch Enrichment
+- Nova rota `/api/enrich/batch` aceita ate 5 companyIds por request
+- OpenAI provider envia 1 API call para 5 empresas (batch prompt)
+- Anthropic provider processa sequencialmente (web_search nao funciona bem em batch)
+- `useBulkEnrich` agora envia batches de 5 ao inves de 1 por 1
+
+### SSE Streaming
+- API migrada de keepalive-spaces para SSE format (`data: {...}\n\n`)
+- Eventos tipados: reasoning, result, batch_item, done, error
+- Client hook `parseSSEStream()` processa eventos incrementalmente
+
+### Reasoning Window
+- Novo componente `ReasoningPanel` com icone Brain, collapsible, auto-scroll
+- Mostra texto do AI em tempo real durante enrichment
+- Integrado em `EnrichButton` (single) e dialog de "Enrich All" (bulk)
+
+### Settings
+- Titulo atualizado para "AI Enrichment Provider"
+- Instrucoes para ambos OpenAI e Anthropic API keys
+- Documentacao do env var ENRICH_PROVIDER
+
+### Build
+- `npm run build` passa com zero erros
+- Dependencia `openai` adicionada ao package.json

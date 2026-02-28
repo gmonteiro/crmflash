@@ -1,5 +1,6 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server"
-import { enrichPersonWithAI, enrichCompanyWithAI } from "@/lib/enrich/claude-enrich"
+import { getEnrichProvider } from "@/lib/enrich"
+import type { EnrichSSEEvent } from "@/lib/enrich"
 
 export const maxDuration = 60
 
@@ -10,11 +11,17 @@ function jsonResponse(data: Record<string, unknown>, status = 200) {
   })
 }
 
+function hasRequiredApiKey(): boolean {
+  const provider = process.env.ENRICH_PROVIDER || "openai"
+  if (provider === "anthropic") return !!process.env.ANTHROPIC_API_KEY
+  return !!process.env.OPENAI_API_KEY
+}
+
 export async function POST(request: Request) {
   const { type, personId, companyId } = await request.json()
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return jsonResponse({ error: "ANTHROPIC_API_KEY not configured" }, 500)
+  if (!hasRequiredApiKey()) {
+    return jsonResponse({ error: "API key not configured. Check your ENRICH_PROVIDER and corresponding API key." }, 500)
   }
 
   const supabase = await createServerSupabaseClient()
@@ -33,15 +40,15 @@ export async function POST(request: Request) {
     return jsonResponse({ error: "companyId is required" }, 400)
   }
 
-  // Stream response to keep connection alive during AI processing
   const encoder = new TextEncoder()
   const stream = new TransformStream()
   const writer = stream.writable.getWriter()
 
-  const write = (data: string) => writer.write(encoder.encode(data))
-  const onProgress = () => write(" ")
+  const sendEvent = (event: EnrichSSEEvent) =>
+    writer.write(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
 
-  // Run enrichment in background, streaming keepalive bytes
+  const provider = getEnrichProvider()
+
   ;(async () => {
     try {
       if (type === "person") {
@@ -53,12 +60,12 @@ export async function POST(request: Request) {
           .single()
 
         if (!person) {
-          await write(JSON.stringify({ error: "Person not found" }))
+          await sendEvent({ type: "error", message: "Person not found" })
           await writer.close()
           return
         }
 
-        const enriched = await enrichPersonWithAI(
+        const enriched = await provider.enrichPerson(
           {
             full_name: person.full_name,
             email: person.email,
@@ -66,7 +73,10 @@ export async function POST(request: Request) {
             current_company: person.current_company,
             linkedin_url: person.linkedin_url,
           },
-          { onProgress },
+          {
+            onReasoning: (chunk) => sendEvent({ type: "reasoning", text: chunk }),
+            onProgress: () => {},
+          },
         )
 
         const update: Record<string, unknown> = {
@@ -104,9 +114,9 @@ export async function POST(request: Request) {
           .eq("id", personId)
 
         if (error) {
-          await write(JSON.stringify({ error: error.message }))
+          await sendEvent({ type: "error", message: error.message })
         } else {
-          await write(JSON.stringify({ success: true, enriched }))
+          await sendEvent({ type: "result", success: true, enriched })
         }
       }
 
@@ -119,7 +129,7 @@ export async function POST(request: Request) {
           .single()
 
         if (!company) {
-          await write(JSON.stringify({ error: "Company not found" }))
+          await sendEvent({ type: "error", message: "Company not found" })
           await writer.close()
           return
         }
@@ -130,7 +140,7 @@ export async function POST(request: Request) {
           .eq("company_id", companyId)
           .limit(10)
 
-        const enriched = await enrichCompanyWithAI(
+        const enriched = await provider.enrichCompany(
           {
             name: company.name,
             domain: company.domain,
@@ -143,7 +153,10 @@ export async function POST(request: Request) {
               current_company: p.current_company,
             })),
           },
-          { onProgress },
+          {
+            onReasoning: (chunk) => sendEvent({ type: "reasoning", text: chunk }),
+            onProgress: () => {},
+          },
         )
 
         const update: Record<string, unknown> = {}
@@ -163,22 +176,26 @@ export async function POST(request: Request) {
             .eq("id", companyId)
 
           if (error) {
-            await write(JSON.stringify({ error: error.message }))
+            await sendEvent({ type: "error", message: error.message })
             await writer.close()
             return
           }
         }
 
-        await write(JSON.stringify({ success: true, enriched }))
+        await sendEvent({ type: "result", success: true, enriched })
       }
     } catch (err) {
-      await write(JSON.stringify({ error: (err as Error).message }))
+      await sendEvent({ type: "error", message: (err as Error).message })
     } finally {
       await writer.close()
     }
   })()
 
   return new Response(stream.readable, {
-    headers: { "Content-Type": "text/plain; charset=utf-8" },
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    },
   })
 }

@@ -1,33 +1,60 @@
 "use client"
 
 import { useState, useRef, useCallback } from "react"
+import type { EnrichSSEEvent } from "@/lib/enrich/types"
 
-async function parseStreamResponse(res: Response): Promise<boolean> {
-  const text = await res.text()
-  const trimmed = text.trim()
-  // Stream format: keepalive spaces + final JSON object
-  const start = trimmed.indexOf("{")
-  if (start === -1) return false
-  try {
-    const data = JSON.parse(trimmed.slice(start))
-    return !!data.success
-  } catch {
-    return false
+async function parseSSEStream(
+  res: Response,
+  onEvent: (event: EnrichSSEEvent) => void,
+): Promise<boolean> {
+  const reader = res.body?.getReader()
+  if (!reader) return false
+
+  const decoder = new TextDecoder()
+  let buffer = ""
+  let success = false
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split("\n")
+    buffer = lines.pop() ?? ""
+
+    for (const line of lines) {
+      if (!line.startsWith("data: ")) continue
+      try {
+        const event = JSON.parse(line.slice(6)) as EnrichSSEEvent
+        onEvent(event)
+        if (event.type === "result" && event.success) success = true
+      } catch { /* skip malformed lines */ }
+    }
   }
+
+  return success
 }
 
 export function useEnrich() {
   const [loading, setLoading] = useState(false)
+  const [reasoning, setReasoning] = useState("")
+
+  const clearReasoning = useCallback(() => setReasoning(""), [])
 
   async function enrichPerson(personId: string) {
     setLoading(true)
+    setReasoning("")
     try {
       const res = await fetch("/api/enrich", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "person", personId }),
       })
-      return await parseStreamResponse(res)
+      return await parseSSEStream(res, (event) => {
+        if (event.type === "reasoning") {
+          setReasoning((prev) => prev + event.text)
+        }
+      })
     } catch {
       return false
     } finally {
@@ -37,13 +64,18 @@ export function useEnrich() {
 
   async function enrichCompany(companyId: string) {
     setLoading(true)
+    setReasoning("")
     try {
       const res = await fetch("/api/enrich", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "company", companyId }),
       })
-      return await parseStreamResponse(res)
+      return await parseSSEStream(res, (event) => {
+        if (event.type === "reasoning") {
+          setReasoning((prev) => prev + event.text)
+        }
+      })
     } catch {
       return false
     } finally {
@@ -51,7 +83,7 @@ export function useEnrich() {
     }
   }
 
-  return { enrichPerson, enrichCompany, loading }
+  return { enrichPerson, enrichCompany, loading, reasoning, clearReasoning }
 }
 
 interface BulkItem {
@@ -66,6 +98,7 @@ interface BulkEnrichState {
   currentName: string
   succeeded: number
   failed: number
+  reasoning: string
 }
 
 export function useBulkEnrich() {
@@ -76,6 +109,7 @@ export function useBulkEnrich() {
     currentName: "",
     succeeded: 0,
     failed: 0,
+    reasoning: "",
   })
   const cancelRef = useRef(false)
 
@@ -88,35 +122,52 @@ export function useBulkEnrich() {
       currentName: "",
       succeeded: 0,
       failed: 0,
+      reasoning: "",
     })
 
     let succeeded = 0
     let failed = 0
 
-    for (let i = 0; i < items.length; i++) {
+    // Process in batches of 5
+    for (let i = 0; i < items.length; i += 5) {
       if (cancelRef.current) break
 
-      const item = items[i]
+      const batch = items.slice(i, i + 5)
+      const batchNames = batch.map((b) => b.name).join(", ")
       setState((prev) => ({
         ...prev,
         current: i + 1,
-        currentName: item.name,
+        currentName: batchNames,
+        reasoning: "",
       }))
 
       try {
-        const res = await fetch("/api/enrich", {
+        const res = await fetch("/api/enrich/batch", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ type: "company", companyId: item.id }),
+          body: JSON.stringify({ companyIds: batch.map((b) => b.id) }),
         })
-        const success = await parseStreamResponse(res)
-        if (success) succeeded++
-        else failed++
-      } catch {
-        failed++
-      }
 
-      setState((prev) => ({ ...prev, succeeded, failed }))
+        await parseSSEStream(res, (event) => {
+          if (event.type === "reasoning") {
+            setState((prev) => ({ ...prev, reasoning: prev.reasoning + event.text }))
+          }
+          if (event.type === "batch_item") {
+            if (event.success) succeeded++
+            else failed++
+            setState((prev) => ({
+              ...prev,
+              current: Math.min(i + succeeded + failed, items.length),
+              succeeded,
+              failed,
+            }))
+          }
+        })
+      } catch {
+        // If batch fails entirely, count all as failed
+        failed += batch.length
+        setState((prev) => ({ ...prev, succeeded, failed }))
+      }
     }
 
     setState((prev) => ({ ...prev, running: false }))

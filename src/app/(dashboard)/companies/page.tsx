@@ -12,6 +12,7 @@ import { Progress } from "@/components/ui/progress"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { INDUSTRIES } from "@/lib/constants"
+import { ReasoningPanel } from "@/components/shared/reasoning-panel"
 import { Search, Plus, Sparkles } from "lucide-react"
 import { toast } from "sonner"
 import type { CompanyFormData } from "@/lib/validators"
@@ -156,6 +157,7 @@ export default function CompaniesPage() {
                 Enriching: {bulk.currentName}
               </p>
             )}
+            <ReasoningPanel reasoning={bulk.reasoning} loading={bulk.running} />
             <div className="flex gap-4 text-sm">
               <span className="text-green-600">Succeeded: {bulk.succeeded}</span>
               <span className="text-red-600">Failed: {bulk.failed}</span>
