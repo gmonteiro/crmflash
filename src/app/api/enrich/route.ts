@@ -101,7 +101,7 @@ export async function POST(request: Request) {
 
       const { data: people } = await supabase
         .from("people")
-        .select("full_name, current_title, email")
+        .select("full_name, current_title, email, linkedin_url, current_company")
         .eq("company_id", companyId)
         .limit(10)
 
@@ -109,7 +109,13 @@ export async function POST(request: Request) {
         name: company.name,
         domain: company.domain,
         website: company.website,
-        people: people?.map((p) => ({ name: p.full_name, title: p.current_title, email: p.email })),
+        people: people?.map((p) => ({
+          name: p.full_name,
+          title: p.current_title,
+          email: p.email,
+          linkedin_url: p.linkedin_url,
+          current_company: p.current_company,
+        })),
       })
 
       // Only overwrite empty fields

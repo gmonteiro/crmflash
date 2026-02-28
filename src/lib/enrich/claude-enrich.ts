@@ -22,7 +22,7 @@ interface CompanyHints {
   name: string
   domain?: string | null
   website?: string | null
-  people?: { name: string; title?: string | null; email?: string | null }[]
+  people?: { name: string; title?: string | null; email?: string | null; linkedin_url?: string | null; current_company?: string | null }[]
 }
 
 interface CompanyEnrichResult {
@@ -36,16 +36,21 @@ interface CompanyEnrichResult {
   size_tier?: string
 }
 
+function stripCiteTags(text: string): string {
+  return text.replace(/<\/?cite[^>]*>/g, "")
+}
+
 function extractJson<T>(text: string): T | null {
+  const clean = stripCiteTags(text)
   // Try to find JSON in code blocks first
-  const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/)
+  const codeBlockMatch = clean.match(/```(?:json)?\s*([\s\S]*?)```/)
   if (codeBlockMatch) {
     try {
       return JSON.parse(codeBlockMatch[1].trim())
     } catch { /* fall through */ }
   }
   // Try to find JSON object directly
-  const jsonMatch = text.match(/\{[\s\S]*\}/)
+  const jsonMatch = clean.match(/\{[\s\S]*\}/)
   if (jsonMatch) {
     try {
       return JSON.parse(jsonMatch[0])
@@ -108,11 +113,13 @@ export async function enrichCompanyWithAI(hints: CompanyHints): Promise<CompanyE
   if (hints.people && hints.people.length > 0) {
     const lines = hints.people.map((p) => {
       const details = [p.name]
-      if (p.title) details.push(p.title)
-      if (p.email) details.push(p.email)
+      if (p.title) details.push(`title: ${p.title}`)
+      if (p.current_company) details.push(`listed employer: ${p.current_company}`)
+      if (p.email) details.push(`email: ${p.email}`)
+      if (p.linkedin_url) details.push(`linkedin: ${p.linkedin_url}`)
       return `- ${details.join(", ")}`
     })
-    peopleContext = `\n\nKnown employees at this company (use this to disambiguate which "${hints.name}" is the correct one):\n${lines.join("\n")}`
+    peopleContext = `\n\nIMPORTANT — Known employees at this company. Use their names, nationalities, email domains, LinkedIn profiles, and listed employers to identify the EXACT correct company. For example, Brazilian employee names indicate a Brazilian company:\n${lines.join("\n")}`
   }
 
   const response = await client.messages.create({
