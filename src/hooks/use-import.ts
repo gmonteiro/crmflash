@@ -123,8 +123,21 @@ export function useImport() {
       return true
     })
 
-    // --- Pre-deduplicate companies ---
+    // --- Pre-deduplicate companies (case-insensitive) ---
     const companyMap = new Map<string, string>() // lowercase name -> id
+
+    // Fetch all existing companies for this user (single query, case-insensitive match)
+    const { data: allCompanies } = await supabase
+      .from("companies")
+      .select("id, name")
+      .eq("user_id", user.id)
+
+    if (allCompanies) {
+      for (const c of allCompanies) {
+        companyMap.set(c.name.toLowerCase(), c.id)
+      }
+    }
+
     const uniqueCompanyNames = [
       ...new Set(
         deduplicatedRows
@@ -133,43 +146,22 @@ export function useImport() {
       ),
     ]
 
-    if (uniqueCompanyNames.length > 0) {
-      // Query existing companies in chunks of 100 (Supabase .in() limit)
-      const inChunkSize = 100
-      for (let i = 0; i < uniqueCompanyNames.length; i += inChunkSize) {
-        const chunk = uniqueCompanyNames.slice(i, i + inChunkSize)
-        const { data: existing } = await supabase
+    const missingNames = uniqueCompanyNames.filter(
+      (name) => !companyMap.has(name.toLowerCase())
+    )
+
+    if (missingNames.length > 0) {
+      const insertChunkSize = 500
+      for (let i = 0; i < missingNames.length; i += insertChunkSize) {
+        const chunk = missingNames.slice(i, i + insertChunkSize)
+        const { data: created } = await supabase
           .from("companies")
+          .insert(chunk.map((name) => ({ name, user_id: user.id })))
           .select("id, name")
-          .eq("user_id", user.id)
-          .in("name", chunk)
 
-        if (existing) {
-          for (const c of existing) {
+        if (created) {
+          for (const c of created) {
             companyMap.set(c.name.toLowerCase(), c.id)
-          }
-        }
-      }
-
-      // Find companies that need to be created
-      const missingNames = uniqueCompanyNames.filter(
-        (name) => !companyMap.has(name.toLowerCase())
-      )
-
-      if (missingNames.length > 0) {
-        // Batch insert missing companies in chunks of 500
-        const insertChunkSize = 500
-        for (let i = 0; i < missingNames.length; i += insertChunkSize) {
-          const chunk = missingNames.slice(i, i + insertChunkSize)
-          const { data: created } = await supabase
-            .from("companies")
-            .insert(chunk.map((name) => ({ name, user_id: user.id })))
-            .select("id, name")
-
-          if (created) {
-            for (const c of created) {
-              companyMap.set(c.name.toLowerCase(), c.id)
-            }
           }
         }
       }
