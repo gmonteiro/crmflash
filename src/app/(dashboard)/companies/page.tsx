@@ -141,7 +141,7 @@ export default function CompaniesPage() {
       />
 
       <Dialog open={enrichOpen} onOpenChange={(open) => { if (!open && !bulk.running) handleEnrichClose() }}>
-        <DialogContent showCloseButton={false}>
+        <DialogContent showCloseButton={false} className="max-h-[80vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Enriching Companies</DialogTitle>
             <DialogDescription>
@@ -150,14 +150,14 @@ export default function CompaniesPage() {
                 : `Completed — ${bulk.succeeded} succeeded, ${bulk.failed} failed`}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="space-y-3 min-h-0 flex-1 overflow-hidden">
             <Progress value={enrichPercent} />
             {bulk.running && bulk.currentName && (
               <p className="text-sm text-muted-foreground truncate">
                 Enriching: {bulk.currentName}
               </p>
             )}
-            <ReasoningPanel reasoning={bulk.reasoning} loading={bulk.running} />
+            <ReasoningPanel reasoning={bulk.reasoning} loading={bulk.running} className="max-h-[30vh]" />
             <div className="flex gap-4 text-sm">
               <span className="text-green-600">Succeeded: {bulk.succeeded}</span>
               <span className="text-red-600">Failed: {bulk.failed}</span>

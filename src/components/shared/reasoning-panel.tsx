@@ -23,10 +23,10 @@ export function ReasoningPanel({ reasoning, loading, className }: ReasoningPanel
   if (!reasoning && !loading) return null
 
   return (
-    <div className={cn("rounded-md border bg-muted/50", className)}>
+    <div className={cn("rounded-md border bg-muted/50 min-h-0 flex flex-col", className)}>
       <button
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+        className="flex w-full items-center gap-2 px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground shrink-0"
       >
         {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
         <Brain className="h-3.5 w-3.5" />
@@ -38,7 +38,7 @@ export function ReasoningPanel({ reasoning, loading, className }: ReasoningPanel
       {open && (
         <pre
           ref={scrollRef}
-          className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words px-3 pb-3 text-xs text-muted-foreground"
+          className="min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap break-words px-3 pb-3 text-xs text-muted-foreground"
         >
           {reasoning || (loading ? "thinking..." : "")}
         </pre>
