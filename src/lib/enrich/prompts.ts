@@ -38,10 +38,13 @@ export function buildCompanyPrompt(hints: CompanyHints): string {
       if (p.linkedin_url) details.push(`linkedin: ${p.linkedin_url}`)
       return `- ${details.join(", ")}`
     })
-    peopleContext = `\n\nIMPORTANT — Known employees at this company. Use their names, nationalities, email domains, LinkedIn profiles, and listed employers to identify the EXACT correct company. For example, Brazilian employee names indicate a Brazilian company:\n${lines.join("\n")}`
+    peopleContext = `
+
+CRITICAL — Use the following employee data to identify the EXACT correct company. These are known employees. Analyze their email domains (e.g. @flash.co → flash.co), LinkedIn URLs, listed employers, nationalities (Brazilian names = Brazilian company), and job titles to disambiguate. Do NOT guess a random company with the same name — match the one these people actually work at:
+${lines.join("\n")}`
   }
 
-  return `Search for information about this company: ${parts.join(", ")}.${peopleContext}
+  return `Identify and provide information about this company: ${parts.join(", ")}.${peopleContext}
 
 Find:
 - Industry
@@ -78,10 +81,12 @@ export function buildBatchCompanyPrompt(
       const lines = c.hints.people.map((p) => {
         const details = [p.name]
         if (p.title) details.push(`title: ${p.title}`)
+        if (p.current_company) details.push(`listed employer: ${p.current_company}`)
         if (p.email) details.push(`email: ${p.email}`)
+        if (p.linkedin_url) details.push(`linkedin: ${p.linkedin_url}`)
         return `  - ${details.join(", ")}`
       })
-      peopleContext = `\n  Known employees:\n${lines.join("\n")}`
+      peopleContext = `\n  CRITICAL — Known employees (use their email domains, nationalities, listed employers to identify the EXACT company):\n${lines.join("\n")}`
     }
 
     return `${i + 1}. "${c.hints.name}" (id: ${c.id}) — ${parts.join(", ")}${peopleContext}`
