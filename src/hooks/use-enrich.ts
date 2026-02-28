@@ -4,12 +4,12 @@ import { useState, useRef, useCallback } from "react"
 
 async function parseStreamResponse(res: Response): Promise<boolean> {
   const text = await res.text()
-  const jsonStr = text.trim()
-  // The stream is: keepalive spaces + final JSON object
-  const match = jsonStr.match(/\{[^{}]*\}$/)
-  if (!match) return false
+  const trimmed = text.trim()
+  // Stream format: keepalive spaces + final JSON object
+  const start = trimmed.indexOf("{")
+  if (start === -1) return false
   try {
-    const data = JSON.parse(match[0])
+    const data = JSON.parse(trimmed.slice(start))
     return !!data.success
   } catch {
     return false
