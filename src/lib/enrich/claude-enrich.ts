@@ -54,10 +54,10 @@ function extractJson<T>(text: string): T | null {
 }
 
 function getTextFromResponse(response: Anthropic.Message): string {
-  for (const block of response.content) {
-    if (block.type === "text") return block.text
-  }
-  return ""
+  return response.content
+    .filter((block): block is Anthropic.TextBlock => block.type === "text")
+    .map((block) => block.text)
+    .join("\n")
 }
 
 export async function enrichPersonWithAI(hints: PersonHints): Promise<PersonEnrichResult> {
