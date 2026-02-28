@@ -85,12 +85,16 @@ export class PerplexityEnrichProvider implements EnrichProvider {
     companies: { hints: CompanyHints; id: string }[],
     callbacks?: StreamCallbacks & { onBatchItem?: (id: string, result: CompanyEnrichResult) => void },
   ): Promise<Map<string, CompanyEnrichResult>> {
-    // Perplexity uses web search per request — process sequentially
     const results = new Map<string, CompanyEnrichResult>()
     for (const company of companies) {
-      const result = await this.enrichCompany(company.hints, callbacks)
-      results.set(company.id, result)
-      callbacks?.onBatchItem?.(company.id, result)
+      try {
+        const result = await this.enrichCompany(company.hints, callbacks)
+        results.set(company.id, result)
+        callbacks?.onBatchItem?.(company.id, result)
+      } catch {
+        results.set(company.id, {})
+        callbacks?.onBatchItem?.(company.id, {})
+      }
     }
     return results
   }

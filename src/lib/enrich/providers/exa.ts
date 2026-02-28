@@ -156,9 +156,14 @@ export class ExaEnrichProvider implements EnrichProvider {
   ): Promise<Map<string, CompanyEnrichResult>> {
     const results = new Map<string, CompanyEnrichResult>()
     for (const company of companies) {
-      const result = await this.enrichCompany(company.hints, callbacks)
-      results.set(company.id, result)
-      callbacks?.onBatchItem?.(company.id, result)
+      try {
+        const result = await this.enrichCompany(company.hints, callbacks)
+        results.set(company.id, result)
+        callbacks?.onBatchItem?.(company.id, result)
+      } catch {
+        results.set(company.id, {})
+        callbacks?.onBatchItem?.(company.id, {})
+      }
     }
     return results
   }

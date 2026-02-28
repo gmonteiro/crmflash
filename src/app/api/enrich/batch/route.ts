@@ -1,6 +1,6 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server"
 import { getEnrichProvider } from "@/lib/enrich"
-import type { EnrichSSEEvent, CompanyHints } from "@/lib/enrich"
+import type { EnrichSSEEvent, CompanyHints, CompanyEnrichResult } from "@/lib/enrich"
 
 export const maxDuration = 120
 
@@ -16,6 +16,10 @@ function hasRequiredApiKey(provider: string): boolean {
   if (provider === "perplexity") return !!process.env.PERPLEXITY_API_KEY
   if (provider === "exa") return !!process.env.EXA_API_KEY
   return !!process.env.OPENAI_API_KEY
+}
+
+function isNonEmpty(result: CompanyEnrichResult): boolean {
+  return !!(result.industry || result.description || result.employee_count || result.estimated_revenue || result.size_tier)
 }
 
 export async function POST(request: Request) {
@@ -79,7 +83,8 @@ export async function POST(request: Request) {
         peopleByCompany.set(p.company_id, list)
       }
 
-      // Build batch input
+      // Build hints map
+      const hintsMap = new Map<string, CompanyHints>()
       const batchInput = companies.map((company) => {
         const people = peopleByCompany.get(company.id) ?? []
         const hints: CompanyHints = {
@@ -94,55 +99,79 @@ export async function POST(request: Request) {
             current_company: p.current_company,
           })),
         }
+        hintsMap.set(company.id, hints)
         return { id: company.id, hints }
       })
 
-      // Call provider batch enrichment
-      const results = await enrichProvider.enrichCompaniesBatch(batchInput, {
+      // Track which companies got non-empty results
+      const enrichedIds = new Set<string>()
+
+      // Save enrichment result to DB, returns true if non-empty
+      async function saveResult(id: string, enrichResult: CompanyEnrichResult): Promise<boolean> {
+        const update: Record<string, unknown> = {}
+        if (enrichResult.industry) update.industry = enrichResult.industry
+        if (enrichResult.description) update.description = enrichResult.description
+        if (enrichResult.website) update.website = enrichResult.website
+        if (enrichResult.domain) update.domain = enrichResult.domain
+        if (enrichResult.linkedin_url) update.linkedin_url = enrichResult.linkedin_url
+        if (enrichResult.employee_count) update.employee_count = enrichResult.employee_count
+        if (enrichResult.estimated_revenue) update.estimated_revenue = enrichResult.estimated_revenue
+        if (enrichResult.size_tier) update.size_tier = enrichResult.size_tier
+
+        if (Object.keys(update).length === 0) return false
+
+        const { error } = await supabase
+          .from("companies")
+          .update(update)
+          .eq("id", id)
+
+        return !error
+      }
+
+      // First pass: batch enrichment
+      await enrichProvider.enrichCompaniesBatch(batchInput, {
         onReasoning: (chunk) => sendEvent({ type: "reasoning", text: chunk }),
         onBatchItem: async (id, enrichResult) => {
-          // Save to DB as each result comes in
-          const company = companies.find((c) => c.id === id)
-          if (!company) return
-
-          const update: Record<string, unknown> = {}
-          if (enrichResult.industry) update.industry = enrichResult.industry
-          if (enrichResult.description) update.description = enrichResult.description
-          if (enrichResult.website) update.website = enrichResult.website
-          if (enrichResult.domain) update.domain = enrichResult.domain
-          if (enrichResult.linkedin_url) update.linkedin_url = enrichResult.linkedin_url
-          if (enrichResult.employee_count) update.employee_count = enrichResult.employee_count
-          if (enrichResult.estimated_revenue) update.estimated_revenue = enrichResult.estimated_revenue
-          if (enrichResult.size_tier) update.size_tier = enrichResult.size_tier
-
-          if (Object.keys(update).length > 0) {
-            const { error } = await supabase
-              .from("companies")
-              .update(update)
-              .eq("id", id)
-
-            if (error) {
-              failed++
-              await sendEvent({ type: "batch_item", id, success: false, enriched: enrichResult })
+          if (isNonEmpty(enrichResult)) {
+            const saved = await saveResult(id, enrichResult)
+            if (saved) {
+              enrichedIds.add(id)
+              succeeded++
+              await sendEvent({ type: "batch_item", id, success: true, enriched: enrichResult })
               return
             }
           }
-
-          succeeded++
-          await sendEvent({ type: "batch_item", id, success: true, enriched: enrichResult })
+          // Don't count as failed yet — will retry
         },
       })
 
-      // Handle any companies that weren't in onBatchItem callbacks
+      // Second pass: retry companies that got empty or failed results individually
       for (const company of companies) {
-        if (!results.has(company.id)) {
-          failed++
-          await sendEvent({
-            type: "batch_item",
-            id: company.id,
-            success: false,
-            enriched: {},
+        if (enrichedIds.has(company.id)) continue
+
+        try {
+          const hints = hintsMap.get(company.id)!
+          const result = await enrichProvider.enrichCompany(hints, {
+            onReasoning: (chunk) => sendEvent({ type: "reasoning", text: chunk }),
+            onProgress: () => {},
           })
+
+          if (isNonEmpty(result)) {
+            const saved = await saveResult(company.id, result)
+            if (saved) {
+              enrichedIds.add(company.id)
+              succeeded++
+              await sendEvent({ type: "batch_item", id: company.id, success: true, enriched: result })
+              continue
+            }
+          }
+
+          // Still empty after retry
+          failed++
+          await sendEvent({ type: "batch_item", id: company.id, success: false, enriched: result })
+        } catch {
+          failed++
+          await sendEvent({ type: "batch_item", id: company.id, success: false, enriched: {} })
         }
       }
 
