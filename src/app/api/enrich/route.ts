@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 import { createServerSupabaseClient } from "@/lib/supabase/server"
 import { enrichPersonWithAI, enrichCompanyWithAI } from "@/lib/enrich/claude-enrich"
 
+export const maxDuration = 60
+
 export async function POST(request: Request) {
   try {
     const { type, personId, companyId } = await request.json()
