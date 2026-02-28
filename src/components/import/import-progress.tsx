@@ -8,7 +8,7 @@ import { CheckCircle2, AlertCircle, Loader2 } from "lucide-react"
 interface ImportProgressProps {
   progress: number
   done: boolean
-  results: { success: number; errors: number; total: number }
+  results: { success: number; errors: number; skipped: number; total: number }
   onReset: () => void
 }
 
@@ -34,6 +34,12 @@ export function ImportProgress({ progress, done, results, onReset }: ImportProgr
               <CheckCircle2 className="h-4 w-4 text-green-500" />
               <span className="text-sm">{results.success} imported</span>
             </div>
+            {results.skipped > 0 && (
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 text-yellow-500" />
+                <span className="text-sm">{results.skipped} duplicates skipped</span>
+              </div>
+            )}
             {results.errors > 0 && (
               <div className="flex items-center gap-2">
                 <AlertCircle className="h-4 w-4 text-destructive" />

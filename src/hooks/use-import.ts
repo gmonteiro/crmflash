@@ -16,7 +16,7 @@ export function useImport() {
   const [columnMapping, setColumnMapping] = useState<Record<string, string>>({})
   const [validations, setValidations] = useState<RowValidation[]>([])
   const [progress, setProgress] = useState(0)
-  const [results, setResults] = useState({ success: 0, errors: 0, total: 0 })
+  const [results, setResults] = useState({ success: 0, errors: 0, skipped: 0, total: 0 })
 
   async function handleFileSelect(f: File) {
     setFile(f)
@@ -35,10 +35,24 @@ export function useImport() {
     const rows = parseResult.rows
 
     // validateRow is pure string ops + one regex — sub-millisecond per row.
-    // Even 100k rows finishes in < 200ms, so no chunking/setTimeout needed.
     const validationResults = rows.map((row, idx) =>
       validateRow(row, columnMapping, idx)
     )
+
+    // Intra-file dedup: flag duplicate emails within the same file
+    const seenEmails = new Set<string>()
+    for (const v of validationResults) {
+      const email = v.data.email?.toLowerCase()
+      if (email) {
+        if (seenEmails.has(email)) {
+          v.valid = false
+          v.errors.push(`Duplicate email "${v.data.email}" in file`)
+        } else {
+          seenEmails.add(email)
+        }
+      }
+    }
+
     setValidations(validationResults)
     setStep("preview")
   }
@@ -71,11 +85,49 @@ export function useImport() {
 
     const validRows = validations.filter((v) => v.valid)
 
+    // --- Database dedup: skip people whose email already exists ---
+    const existingEmails = new Set<string>()
+    const emailsToCheck = [
+      ...new Set(
+        validRows
+          .map((v) => v.data.email?.toLowerCase())
+          .filter((e): e is string => !!e)
+      ),
+    ]
+
+    if (emailsToCheck.length > 0) {
+      const inChunkSize = 100
+      for (let i = 0; i < emailsToCheck.length; i += inChunkSize) {
+        const chunk = emailsToCheck.slice(i, i + inChunkSize)
+        const { data: existing } = await supabase
+          .from("people")
+          .select("email")
+          .eq("user_id", user.id)
+          .in("email", chunk)
+
+        if (existing) {
+          for (const p of existing) {
+            if (p.email) existingEmails.add(p.email.toLowerCase())
+          }
+        }
+      }
+    }
+
+    let skippedCount = 0
+    const deduplicatedRows = validRows.filter((v) => {
+      const email = v.data.email?.toLowerCase()
+      if (email && existingEmails.has(email)) {
+        skippedCount++
+        return false
+      }
+      return true
+    })
+
     // --- Pre-deduplicate companies ---
     const companyMap = new Map<string, string>() // lowercase name -> id
     const uniqueCompanyNames = [
       ...new Set(
-        validRows
+        deduplicatedRows
           .map((v) => v.data.current_company?.trim())
           .filter((name): name is string => !!name)
       ),
@@ -126,8 +178,8 @@ export function useImport() {
     // --- Batch insert people, 500 at a time ---
     const batchSize = 500
 
-    for (let i = 0; i < validRows.length; i += batchSize) {
-      const batch = validRows.slice(i, i + batchSize)
+    for (let i = 0; i < deduplicatedRows.length; i += batchSize) {
+      const batch = deduplicatedRows.slice(i, i + batchSize)
 
       const inserts = batch.map((row) => {
         const data = row.data
@@ -161,7 +213,7 @@ export function useImport() {
         successCount += batch.length
       }
 
-      setProgress(Math.round(((i + batch.length) / validRows.length) * 100))
+      setProgress(Math.round(((i + batch.length) / deduplicatedRows.length) * 100))
     }
 
     // Count invalid rows as errors
@@ -181,7 +233,7 @@ export function useImport() {
         .eq("id", importRecord.id)
     }
 
-    setResults({ success: successCount, errors: errorCount, total: validations.length })
+    setResults({ success: successCount, errors: errorCount, skipped: skippedCount, total: validations.length })
     setStep("done")
   }
 
@@ -192,7 +244,7 @@ export function useImport() {
     setColumnMapping({})
     setValidations([])
     setProgress(0)
-    setResults({ success: 0, errors: 0, total: 0 })
+    setResults({ success: 0, errors: 0, skipped: 0, total: 0 })
   }
 
   return {
