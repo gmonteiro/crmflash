@@ -2,9 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { useTheme } from "next-themes"
@@ -12,15 +10,30 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner"
 import { Sparkles, Palette, Key } from "lucide-react"
 
+type KeyStatus = Record<"openai" | "anthropic" | "perplexity" | "exa", boolean>
+
+const KEY_LABELS: Record<keyof KeyStatus, { name: string; env: string }> = {
+  openai: { name: "OpenAI", env: "OPENAI_API_KEY" },
+  anthropic: { name: "Anthropic", env: "ANTHROPIC_API_KEY" },
+  perplexity: { name: "Perplexity", env: "PERPLEXITY_API_KEY" },
+  exa: { name: "Exa", env: "EXA_API_KEY" },
+}
+
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme()
-  const [apiKey, setApiKey] = useState("")
-  const [saved, setSaved] = useState(false)
   const [provider, setProvider] = useState("openai")
+  const [keyStatus, setKeyStatus] = useState<KeyStatus | null>(null)
 
   useEffect(() => {
     const stored = localStorage.getItem("enrichProvider")
     if (stored === "openai" || stored === "anthropic" || stored === "perplexity" || stored === "exa") setProvider(stored)
+  }, [])
+
+  useEffect(() => {
+    fetch("/api/settings/keys")
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => { if (data) setKeyStatus(data) })
+      .catch(() => {})
   }, [])
 
   function handleProviderChange(value: string) {
@@ -33,13 +46,6 @@ export default function SettingsPage() {
       exa: "Exa Answer",
     }
     toast.success(`Enrichment provider switched to ${labels[value] ?? value}`)
-  }
-
-  function handleSaveApiKey() {
-    if (apiKey) {
-      toast.success("API key saved. Set it in .env.local for server-side access.")
-      setSaved(true)
-    }
   }
 
   return (
@@ -103,37 +109,32 @@ export default function SettingsPage() {
             </p>
           </div>
           <Separator />
-          <div className="space-y-2">
-            <Label htmlFor="api-key" className="flex items-center gap-2">
+          <div className="space-y-3">
+            <Label className="flex items-center gap-2">
               <Key className="h-4 w-4" />
-              API Key
+              API Key Status
             </Label>
-            <div className="flex gap-2">
-              <Input
-                id="api-key"
-                type="password"
-                value={apiKey}
-                onChange={(e) => { setApiKey(e.target.value); setSaved(false) }}
-                placeholder="Enter your API key"
-              />
-              <Button onClick={handleSaveApiKey} disabled={!apiKey}>
-                Save
-              </Button>
+            <div className="grid gap-2">
+              {(Object.entries(KEY_LABELS) as [keyof KeyStatus, { name: string; env: string }][]).map(([key, { name, env }]) => (
+                <div key={key} className="flex items-center justify-between rounded-md border px-3 py-2">
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="font-medium">{name}</span>
+                    <code className="rounded bg-muted px-1 py-0.5 text-xs text-muted-foreground">{env}</code>
+                  </div>
+                  {keyStatus ? (
+                    keyStatus[key] ? (
+                      <Badge variant="outline" className="border-green-600 text-green-600">Configured</Badge>
+                    ) : (
+                      <Badge variant="outline" className="border-red-600 text-red-600">Missing</Badge>
+                    )
+                  ) : (
+                    <Badge variant="outline" className="text-muted-foreground">Loading...</Badge>
+                  )}
+                </div>
+              ))}
             </div>
-            {saved && (
-              <Badge variant="outline" className="text-green-600">
-                Saved
-              </Badge>
-            )}
-          </div>
-          <Separator />
-          <div className="text-sm text-muted-foreground space-y-1">
-            <p>
-              Server-side keys are set via environment variables:{" "}
-              <code className="rounded bg-muted px-1 py-0.5">OPENAI_API_KEY</code>,{" "}
-              <code className="rounded bg-muted px-1 py-0.5">ANTHROPIC_API_KEY</code>,{" "}
-              <code className="rounded bg-muted px-1 py-0.5">PERPLEXITY_API_KEY</code>,{" "}
-              <code className="rounded bg-muted px-1 py-0.5">EXA_API_KEY</code>
+            <p className="text-xs text-muted-foreground">
+              API keys are set via environment variables on the server (.env.local or hosting provider).
             </p>
           </div>
         </CardContent>

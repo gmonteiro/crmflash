@@ -16,6 +16,8 @@ export interface Company {
   logo_url: string | null
   website: string | null
   metadata: Record<string, unknown> | null
+  kanban_column_id: string | null
+  kanban_position: number | null
   created_at: string
   updated_at: string
 }

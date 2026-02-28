@@ -2,18 +2,19 @@
 
 import { useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import type { Person } from "@/types/database"
+import type { Company } from "@/types/database"
 import { Badge } from "@/components/ui/badge"
-import { GripVertical, Mail } from "lucide-react"
+import { GripVertical, X } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 
 interface KanbanCardProps {
-  person: Person
+  company: Company
   overlay?: boolean
+  onRemove?: (id: string) => void
 }
 
-export function KanbanCard({ person, overlay }: KanbanCardProps) {
+export function KanbanCard({ company, overlay, onRemove }: KanbanCardProps) {
   const {
     attributes,
     listeners,
@@ -22,8 +23,8 @@ export function KanbanCard({ person, overlay }: KanbanCardProps) {
     transition,
     isDragging,
   } = useSortable({
-    id: person.id,
-    data: { type: "card", person, columnId: person.kanban_column_id },
+    id: company.id,
+    data: { type: "card", company, columnId: company.kanban_column_id },
   })
 
   const style = {
@@ -36,47 +37,50 @@ export function KanbanCard({ person, overlay }: KanbanCardProps) {
       ref={!overlay ? setNodeRef : undefined}
       style={!overlay ? style : undefined}
       className={cn(
-        "group rounded-md border bg-card p-3 shadow-sm",
+        "group rounded-md border bg-card p-2 shadow-sm",
         isDragging && "opacity-30",
         overlay && "rotate-2 shadow-lg"
       )}
     >
-      <div className="flex items-start gap-2">
+      <div className="flex items-start gap-1.5">
         <button
           className="mt-0.5 shrink-0 cursor-grab text-muted-foreground opacity-0 group-hover:opacity-100 active:cursor-grabbing"
           {...attributes}
           {...listeners}
         >
-          <GripVertical className="h-4 w-4" />
+          <GripVertical className="h-3.5 w-3.5" />
         </button>
         <div className="min-w-0 flex-1">
           <Link
-            href={`/people/${person.id}`}
-            className="text-sm font-medium hover:underline"
+            href={`/companies/${company.id}`}
+            className="text-sm font-medium leading-tight hover:underline truncate block"
           >
-            {person.full_name}
+            {company.name}
           </Link>
-          {person.current_title && (
-            <p className="text-xs text-muted-foreground truncate">
-              {person.current_title}
-            </p>
-          )}
           <div className="mt-1 flex flex-wrap items-center gap-1">
-            {person.current_company && (
-              <Badge variant="outline" className="text-[10px] h-5">
-                {person.current_company}
+            {company.industry && (
+              <Badge variant="outline" className="text-[10px] h-4 px-1">
+                {company.industry}
               </Badge>
             )}
-            {person.email && (
-              <Mail className="h-3 w-3 text-muted-foreground" />
-            )}
-            {person.category && (
-              <Badge variant="secondary" className="text-[10px] h-5">
-                {person.category}
+            {company.size_tier && (
+              <Badge variant="secondary" className="text-[10px] h-4 px-1">
+                {company.size_tier}
               </Badge>
             )}
           </div>
         </div>
+        {onRemove && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onRemove(company.id)
+            }}
+            className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>
     </div>
   )

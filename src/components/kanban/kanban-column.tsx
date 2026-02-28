@@ -14,9 +14,10 @@ interface KanbanColumnProps {
   column: KanbanColumnWithCards
   onRename: (title: string) => void
   onDelete: () => void
+  onRemoveCard: (companyId: string) => void
 }
 
-export function KanbanColumnComponent({ column, onRename, onDelete }: KanbanColumnProps) {
+export function KanbanColumnComponent({ column, onRename, onDelete, onRemoveCard }: KanbanColumnProps) {
   const {
     attributes,
     listeners,
@@ -62,8 +63,8 @@ export function KanbanColumnComponent({ column, onRename, onDelete }: KanbanColu
         <ScrollArea className="h-[calc(100vh-250px)]">
           <SortableContext items={cardIds} strategy={verticalListSortingStrategy}>
             <div className="space-y-2 p-2">
-              {column.cards.map((person) => (
-                <KanbanCard key={person.id} person={person} />
+              {column.cards.map((company) => (
+                <KanbanCard key={company.id} company={company} onRemove={onRemoveCard} />
               ))}
             </div>
           </SortableContext>

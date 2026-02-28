@@ -6,31 +6,31 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { UserPlus, Search, Loader2 } from "lucide-react"
+import { Building2, Search, Loader2 } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
 import { createClient } from "@/lib/supabase/client"
-import type { Person, KanbanColumn } from "@/types/database"
+import type { Company, KanbanColumn } from "@/types/database"
 
-interface AddPersonDialogProps {
+interface AddCompanyDialogProps {
   columns: KanbanColumn[]
-  onAdd: (personId: string, columnId?: string) => Promise<void>
+  onAdd: (companyId: string, columnId?: string) => Promise<void>
 }
 
-export function AddPersonDialog({ columns, onAdd }: AddPersonDialogProps) {
+export function AddCompanyDialog({ columns, onAdd }: AddCompanyDialogProps) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState("")
   const [columnId, setColumnId] = useState<string>("")
-  const [people, setPeople] = useState<Person[]>([])
+  const [companies, setCompanies] = useState<Company[]>([])
   const [loading, setLoading] = useState(false)
   const [adding, setAdding] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open) {
       setSearch("")
-      setPeople([])
+      setCompanies([])
       setColumnId("")
       return
     }
-    // Set default column
     if (columns.length > 0 && !columnId) {
       setColumnId(columns[0].id)
     }
@@ -44,28 +44,28 @@ export function AddPersonDialog({ columns, onAdd }: AddPersonDialogProps) {
       const supabase = createClient()
 
       let query = supabase
-        .from("people")
-        .select("id, first_name, last_name, full_name, email, current_title")
+        .from("companies")
+        .select("id, name, industry, size_tier")
         .is("kanban_column_id", null)
-        .order("full_name")
+        .order("name")
         .limit(20)
 
       if (search.trim()) {
-        query = query.ilike("full_name", `%${search.trim()}%`)
+        query = query.ilike("name", `%${search.trim()}%`)
       }
 
       const { data } = await query
-      setPeople((data ?? []) as Person[])
+      setCompanies((data ?? []) as Company[])
       setLoading(false)
     }, 300)
 
     return () => clearTimeout(timer)
   }, [open, search])
 
-  async function handleAdd(personId: string) {
-    setAdding(personId)
-    await onAdd(personId, columnId || undefined)
-    setPeople((prev) => prev.filter((p) => p.id !== personId))
+  async function handleAdd(companyId: string) {
+    setAdding(companyId)
+    await onAdd(companyId, columnId || undefined)
+    setCompanies((prev) => prev.filter((c) => c.id !== companyId))
     setAdding(null)
   }
 
@@ -73,13 +73,13 @@ export function AddPersonDialog({ columns, onAdd }: AddPersonDialogProps) {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="outline" className="h-10 shrink-0">
-          <UserPlus className="mr-2 h-4 w-4" />
-          Add Person
+          <Building2 className="mr-2 h-4 w-4" />
+          Add Company
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Add Person to Board</DialogTitle>
+          <DialogTitle>Add Company to Board</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 pt-2">
           <div className="space-y-2">
@@ -98,7 +98,7 @@ export function AddPersonDialog({ columns, onAdd }: AddPersonDialogProps) {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Search People</Label>
+            <Label>Search Companies</Label>
             <div className="relative">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
@@ -115,28 +115,37 @@ export function AddPersonDialog({ columns, onAdd }: AddPersonDialogProps) {
               <div className="flex justify-center py-4">
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               </div>
-            ) : people.length === 0 ? (
+            ) : companies.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-4">
-                No people available to add.
+                No companies available to add.
               </p>
             ) : (
-              people.map((person) => (
+              companies.map((company) => (
                 <button
-                  key={person.id}
-                  onClick={() => handleAdd(person.id)}
-                  disabled={adding === person.id}
+                  key={company.id}
+                  onClick={() => handleAdd(company.id)}
+                  disabled={adding === company.id}
                   className="flex w-full items-center justify-between rounded-md border p-2.5 text-left hover:bg-muted disabled:opacity-50"
                 >
-                  <div>
-                    <p className="text-sm font-medium">{person.full_name}</p>
-                    {person.current_title && (
-                      <p className="text-xs text-muted-foreground">{person.current_title}</p>
-                    )}
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{company.name}</p>
+                    <div className="flex items-center gap-1 mt-0.5">
+                      {company.industry && (
+                        <Badge variant="outline" className="text-[10px] h-4 px-1">
+                          {company.industry}
+                        </Badge>
+                      )}
+                      {company.size_tier && (
+                        <Badge variant="secondary" className="text-[10px] h-4 px-1">
+                          {company.size_tier}
+                        </Badge>
+                      )}
+                    </div>
                   </div>
-                  {adding === person.id ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                  {adding === company.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin shrink-0" />
                   ) : (
-                    <UserPlus className="h-4 w-4 text-muted-foreground" />
+                    <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
                   )}
                 </button>
               ))

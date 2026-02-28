@@ -3,7 +3,7 @@
 import { DndContext, DragOverlay, closestCorners, type DragStartEvent, type DragEndEvent, type DragOverEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core"
 import { SortableContext, horizontalListSortingStrategy } from "@dnd-kit/sortable"
 import { useState, type ReactNode } from "react"
-import type { Person, KanbanColumn } from "@/types/database"
+import type { Company } from "@/types/database"
 import { KanbanCard } from "./kanban-card"
 
 interface KanbanProvidersProps {
@@ -19,7 +19,7 @@ export function KanbanProviders({
   onDragOver,
   children,
 }: KanbanProvidersProps) {
-  const [activeCard, setActiveCard] = useState<Person | null>(null)
+  const [activeCard, setActiveCard] = useState<Company | null>(null)
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -30,7 +30,7 @@ export function KanbanProviders({
   function handleDragStart(event: DragStartEvent) {
     const { active } = event
     if (active.data.current?.type === "card") {
-      setActiveCard(active.data.current.person as Person)
+      setActiveCard(active.data.current.company as Company)
     }
   }
 
@@ -51,7 +51,7 @@ export function KanbanProviders({
         {children}
       </SortableContext>
       <DragOverlay>
-        {activeCard && <KanbanCard person={activeCard} overlay />}
+        {activeCard && <KanbanCard company={activeCard} overlay />}
       </DragOverlay>
     </DndContext>
   )

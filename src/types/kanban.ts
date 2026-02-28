@@ -1,7 +1,7 @@
-import type { KanbanColumn, Person } from './database'
+import type { KanbanColumn, Company } from './database'
 
 export interface KanbanColumnWithCards extends KanbanColumn {
-  cards: Person[]
+  cards: Company[]
 }
 
 export interface KanbanBoardData {
@@ -12,7 +12,7 @@ export type DragType = 'card' | 'column'
 
 export interface CardDragData {
   type: 'card'
-  person: Person
+  company: Company
   columnId: string
 }
 

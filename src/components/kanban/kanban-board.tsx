@@ -6,7 +6,7 @@ import { useKanban } from "@/hooks/use-kanban"
 import { KanbanProviders } from "./kanban-providers"
 import { KanbanColumnComponent } from "./kanban-column"
 import { AddColumnDialog } from "./add-column-dialog"
-import { AddPersonDialog } from "./add-person-dialog"
+import { AddCompanyDialog } from "./add-company-dialog"
 import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "sonner"
 
@@ -19,7 +19,8 @@ export function KanbanBoard() {
     addColumn,
     updateColumn,
     deleteColumn,
-    addPersonToBoard,
+    addCompanyToBoard,
+    removeCardFromBoard,
   } = useKanban()
 
   const handleDragOver = useCallback((event: DragOverEvent) => {
@@ -106,10 +107,11 @@ export function KanbanBoard() {
               }
               toast.success("Column deleted")
             }}
+            onRemoveCard={removeCardFromBoard}
           />
         ))}
       </KanbanProviders>
-      <AddPersonDialog columns={columns} onAdd={addPersonToBoard} />
+      <AddCompanyDialog columns={columns} onAdd={addCompanyToBoard} />
       <AddColumnDialog onAdd={addColumn} />
     </div>
   )

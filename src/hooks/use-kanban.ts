@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
-import type { KanbanColumn, Person } from "@/types/database"
+import type { KanbanColumn, Company } from "@/types/database"
 import type { KanbanColumnWithCards } from "@/types/kanban"
 import { calculatePosition } from "@/lib/kanban/position"
 
@@ -24,15 +24,15 @@ export function useKanban() {
       return
     }
 
-    const { data: people } = await supabase
-      .from("people")
-      .select("*, company:companies(id, name)")
+    const { data: companies } = await supabase
+      .from("companies")
+      .select("*")
       .not("kanban_column_id", "is", null)
       .order("kanban_position")
 
     const columnsWithCards: KanbanColumnWithCards[] = (cols as KanbanColumn[]).map((col) => ({
       ...col,
-      cards: ((people ?? []) as Person[]).filter((p: Person) => p.kanban_column_id === col.id),
+      cards: ((companies ?? []) as Company[]).filter((c: Company) => c.kanban_column_id === col.id),
     }))
 
     setColumns(columnsWithCards)
@@ -44,24 +44,24 @@ export function useKanban() {
   }, [fetchBoard])
 
   async function moveCard(
-    personId: string,
+    companyId: string,
     targetColumnId: string,
     targetIndex: number
   ) {
     const targetCol = columns.find((c) => c.id === targetColumnId)
     if (!targetCol) return
 
-    const cards = targetCol.cards.filter((c) => c.id !== personId)
+    const cards = targetCol.cards.filter((c) => c.id !== companyId)
     const newPosition = calculatePosition(cards, targetIndex)
 
     // Optimistic update
     setColumns((prev) =>
       prev.map((col) => {
-        const filteredCards = col.cards.filter((c) => c.id !== personId)
+        const filteredCards = col.cards.filter((c) => c.id !== companyId)
         if (col.id === targetColumnId) {
           const movedCard = prev
             .flatMap((c) => c.cards)
-            .find((c) => c.id === personId)
+            .find((c) => c.id === companyId)
           if (!movedCard) return { ...col, cards: filteredCards }
           const updatedCard = {
             ...movedCard,
@@ -78,12 +78,12 @@ export function useKanban() {
 
     const supabase = createClient()
     await supabase
-      .from("people")
+      .from("companies")
       .update({
         kanban_column_id: targetColumnId,
         kanban_position: newPosition,
       })
-      .eq("id", personId)
+      .eq("id", companyId)
   }
 
   async function reorderColumns(activeId: string, overIndex: number) {
@@ -148,12 +148,12 @@ export function useKanban() {
 
     if (moveToColumnId) {
       await supabase
-        .from("people")
+        .from("companies")
         .update({ kanban_column_id: moveToColumnId })
         .eq("kanban_column_id", id)
     } else {
       await supabase
-        .from("people")
+        .from("companies")
         .update({ kanban_column_id: null })
         .eq("kanban_column_id", id)
     }
@@ -164,53 +164,52 @@ export function useKanban() {
     fetchBoard()
   }
 
-  async function addPersonToBoard(personId: string, columnId?: string) {
+  async function addCompanyToBoard(companyId: string, columnId?: string) {
     const targetColumnId = columnId ?? columns[0]?.id
     if (!targetColumnId) return
 
     const supabase = createClient()
 
-    // Fetch the person to add to optimistic state
-    const { data: person } = await supabase
-      .from("people")
-      .select("*, company:companies(id, name)")
-      .eq("id", personId)
+    const { data: company } = await supabase
+      .from("companies")
+      .select("*")
+      .eq("id", companyId)
       .single()
 
-    if (!person) return
+    if (!company) return
 
     const newPosition = Date.now()
-    const updatedPerson = { ...person, kanban_column_id: targetColumnId, kanban_position: newPosition }
+    const updatedCompany = { ...company, kanban_column_id: targetColumnId, kanban_position: newPosition }
 
     // Optimistic update
     setColumns((prev) =>
       prev.map((col) =>
         col.id === targetColumnId
-          ? { ...col, cards: [...col.cards, updatedPerson as Person] }
+          ? { ...col, cards: [...col.cards, updatedCompany as Company] }
           : col
       )
     )
 
     await supabase
-      .from("people")
+      .from("companies")
       .update({ kanban_column_id: targetColumnId, kanban_position: newPosition })
-      .eq("id", personId)
+      .eq("id", companyId)
   }
 
-  async function removePersonFromBoard(personId: string) {
+  async function removeCardFromBoard(companyId: string) {
     // Optimistic update
     setColumns((prev) =>
       prev.map((col) => ({
         ...col,
-        cards: col.cards.filter((c) => c.id !== personId),
+        cards: col.cards.filter((c) => c.id !== companyId),
       }))
     )
 
     const supabase = createClient()
     await supabase
-      .from("people")
+      .from("companies")
       .update({ kanban_column_id: null, kanban_position: null })
-      .eq("id", personId)
+      .eq("id", companyId)
   }
 
   return {
@@ -222,7 +221,7 @@ export function useKanban() {
     addColumn,
     updateColumn,
     deleteColumn,
-    addPersonToBoard,
-    removePersonFromBoard,
+    addCompanyToBoard,
+    removeCardFromBoard,
   }
 }

@@ -176,3 +176,21 @@ Log corrido de todas as decisoes, ajustes, bugs e mudancas de rumo.
 
 ### Build
 - `npm run build` passa com zero erros
+
+---
+
+## 2026-02-28 — Kanban: Companies Instead of People + Card Delete
+
+### Kanban Refactor: People → Companies
+- **Motivo:** Board agora gerencia Companies em vez de People
+- **Migration:** `002_companies_kanban.sql` — `kanban_column_id` + `kanban_position` na tabela `companies`
+- **Types:** `Company` interface ganhou `kanban_column_id` / `kanban_position`; `kanban.ts` trocou `Person[]` → `Company[]`
+- **Hook:** `useKanban` queries agora em `companies`; `addCompanyToBoard` / `removeCardFromBoard` substituem antigos
+- **Card:** Mostra `company.name`, badges de `industry` + `size_tier`, link para `/companies/{id}`
+- **Delete button:** Botao X visivel no hover, remove card do board (set `kanban_column_id = null`)
+- **Compact cards:** `p-2` padding, badges `h-4 px-1`, grip icon menor
+- **Dialog:** `AddCompanyDialog` substitui `AddPersonDialog` — busca por `name`, icone `Building2`
+- **Cleanup:** Deletado `add-person-dialog.tsx`
+
+### Build
+- `npm run build` passa com zero erros
