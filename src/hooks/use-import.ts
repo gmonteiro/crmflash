@@ -39,9 +39,11 @@ export function useImport() {
       validateRow(row, columnMapping, idx)
     )
 
-    // Intra-file dedup: flag duplicate emails within the same file
+    // Intra-file dedup: by email first, then by name+company for rows without email
     const seenEmails = new Set<string>()
+    const seenNames = new Set<string>()
     for (const v of validationResults) {
+      if (!v.valid) continue
       const email = v.data.email?.toLowerCase()
       if (email) {
         if (seenEmails.has(email)) {
@@ -49,6 +51,14 @@ export function useImport() {
           v.errors.push(`Duplicate email "${v.data.email}" in file`)
         } else {
           seenEmails.add(email)
+        }
+      } else {
+        const nameKey = `${(v.data.first_name || "").toLowerCase()}|${(v.data.last_name || "").toLowerCase()}|${(v.data.current_company || "").toLowerCase()}`
+        if (seenNames.has(nameKey)) {
+          v.valid = false
+          v.errors.push(`Duplicate person "${v.data.first_name} ${v.data.last_name}" in file`)
+        } else {
+          seenNames.add(nameKey)
         }
       }
     }
@@ -85,31 +95,20 @@ export function useImport() {
 
     const validRows = validations.filter((v) => v.valid)
 
-    // --- Database dedup: skip people whose email already exists ---
+    // --- Database dedup: skip people that already exist ---
+    // Fetch all existing people (email + name+company) for this user
     const existingEmails = new Set<string>()
-    const emailsToCheck = [
-      ...new Set(
-        validRows
-          .map((v) => v.data.email?.toLowerCase())
-          .filter((e): e is string => !!e)
-      ),
-    ]
+    const existingNames = new Set<string>()
+    const { data: allPeople } = await supabase
+      .from("people")
+      .select("email, first_name, last_name, current_company")
+      .eq("user_id", user.id)
 
-    if (emailsToCheck.length > 0) {
-      const inChunkSize = 100
-      for (let i = 0; i < emailsToCheck.length; i += inChunkSize) {
-        const chunk = emailsToCheck.slice(i, i + inChunkSize)
-        const { data: existing } = await supabase
-          .from("people")
-          .select("email")
-          .eq("user_id", user.id)
-          .in("email", chunk)
-
-        if (existing) {
-          for (const p of existing) {
-            if (p.email) existingEmails.add(p.email.toLowerCase())
-          }
-        }
+    if (allPeople) {
+      for (const p of allPeople) {
+        if (p.email) existingEmails.add(p.email.toLowerCase())
+        const nameKey = `${(p.first_name || "").toLowerCase()}|${(p.last_name || "").toLowerCase()}|${(p.current_company || "").toLowerCase()}`
+        existingNames.add(nameKey)
       }
     }
 
@@ -119,6 +118,13 @@ export function useImport() {
       if (email && existingEmails.has(email)) {
         skippedCount++
         return false
+      }
+      if (!email) {
+        const nameKey = `${(v.data.first_name || "").toLowerCase()}|${(v.data.last_name || "").toLowerCase()}|${(v.data.current_company || "").toLowerCase()}`
+        if (existingNames.has(nameKey)) {
+          skippedCount++
+          return false
+        }
       }
       return true
     })
