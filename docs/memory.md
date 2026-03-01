@@ -236,5 +236,17 @@ Log corrido de todas as decisoes, ajustes, bugs e mudancas de rumo.
 - Novo campo `skipped` no results object
 - `ImportProgress` mostra "X duplicates skipped" com icone amarelo
 
+### Bug Fix: XLSX Numeric Cells Crashing Validation
+- **Problema:** `sheet_to_json` com `defval: ""` so seta default para celulas vazias — numeros, datas e booleans vinham como tipos nativos (number, Date, boolean)
+- **Sintoma:** `.trim()` em numero (ex: phone `5511999`) crashava com TypeError, catch silencioso resetava step para "mapping"
+- **Fix 1:** `parse-xlsx.ts` agora faz `String(val)` em todos os valores antes de retornar
+- **Fix 2:** `validate-row.ts` usa `String(row[sourceCol] ?? "")` como defesa extra
+
+### Validation Loading State
+- **Problema:** Validacao sincrona sem feedback visual — usuario clicava "Continue" e nada acontecia
+- **Solucao:** `confirmMapping` seta `step = "validating"` imediatamente, processa com `setTimeout(_, 50)` para dar tempo ao React renderizar spinner
+- **UI:** Spinner com texto "Validating and checking for duplicates..."
+- **Error handling:** try-catch loga erro e volta para "mapping" se falhar
+
 ### Git config
 - Email do repo atualizado de `gabriel.monteiro@vtex.com` para `gq.monteiro@gmail.com`
