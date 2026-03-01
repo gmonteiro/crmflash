@@ -7,7 +7,7 @@ import { parseXlsx } from "@/lib/import/parse-xlsx"
 import { autoMapColumns } from "@/lib/import/map-columns"
 import { validateRow, type RowValidation } from "@/lib/import/validate-row"
 
-export type ImportStep = "upload" | "mapping" | "preview" | "executing" | "done"
+export type ImportStep = "upload" | "mapping" | "validating" | "preview" | "executing" | "done"
 
 export function useImport() {
   const [step, setStep] = useState<ImportStep>("upload")
@@ -32,33 +32,42 @@ export function useImport() {
   function confirmMapping() {
     if (!parseResult) return
 
-    const rows = parseResult.rows
+    // Show loading state immediately, then process on next tick
+    setStep("validating")
 
-    // validateRow is pure string ops + one regex — sub-millisecond per row.
-    const validationResults = rows.map((row, idx) =>
-      validateRow(row, columnMapping, idx)
-    )
+    setTimeout(() => {
+      try {
+        const rows = parseResult.rows
 
-    // Intra-file dedup by name + title + company (primary key for all rows)
-    const seenKeys = new Set<string>()
-    for (const v of validationResults) {
-      if (!v.valid) continue
-      const key = [
-        (v.data.first_name || ""),
-        (v.data.last_name || ""),
-        (v.data.current_title || ""),
-        (v.data.current_company || ""),
-      ].map((s) => s.toLowerCase().trim()).join("|")
-      if (seenKeys.has(key)) {
-        v.valid = false
-        v.errors.push(`Duplicate: "${v.data.first_name} ${v.data.last_name}" already appears in this file`)
-      } else {
-        seenKeys.add(key)
+        const validationResults = rows.map((row, idx) =>
+          validateRow(row, columnMapping, idx)
+        )
+
+        // Intra-file dedup by name + title + company (primary key for all rows)
+        const seenKeys = new Set<string>()
+        for (const v of validationResults) {
+          if (!v.valid) continue
+          const key = [
+            (v.data.first_name || ""),
+            (v.data.last_name || ""),
+            (v.data.current_title || ""),
+            (v.data.current_company || ""),
+          ].map((s) => s.toLowerCase().trim()).join("|")
+          if (seenKeys.has(key)) {
+            v.valid = false
+            v.errors.push(`Duplicate: "${v.data.first_name} ${v.data.last_name}" already appears in this file`)
+          } else {
+            seenKeys.add(key)
+          }
+        }
+
+        setValidations(validationResults)
+        setStep("preview")
+      } catch (err) {
+        console.error("Validation failed:", err)
+        setStep("mapping")
       }
-    }
-
-    setValidations(validationResults)
-    setStep("preview")
+    }, 50)
   }
 
   async function executeImport() {
