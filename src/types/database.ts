@@ -85,3 +85,47 @@ export interface PersonTag {
   person_id: string
   tag_id: string
 }
+
+export type DocumentType = 'contract' | 'proposal' | 'invoice' | 'report' | 'other'
+export type ActivityType = 'meeting' | 'call' | 'email' | 'note' | 'document_uploaded' | 'next_step_created'
+export type NextStepStatus = 'pending' | 'completed'
+
+export interface CompanyDocument {
+  id: string
+  user_id: string
+  company_id: string
+  name: string
+  file_path: string
+  file_size: number
+  mime_type: string
+  doc_type: DocumentType
+  description: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface CompanyActivity {
+  id: string
+  user_id: string
+  company_id: string
+  type: ActivityType
+  title: string
+  description: string | null
+  date: string
+  created_at: string
+}
+
+export interface CompanyNextStep {
+  id: string
+  user_id: string
+  company_id: string
+  title: string
+  description: string | null
+  due_date: string | null
+  status: NextStepStatus
+  completed_at: string | null
+  created_at: string
+  updated_at: string
+  // Joined (for calendar)
+  company?: { id: string; name: string } | null
+}

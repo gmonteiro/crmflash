@@ -3,13 +3,15 @@
 import { useState, useEffect, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Building2, Globe, Linkedin, Users, ExternalLink } from "lucide-react"
-import Link from "next/link"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import type { Company, Person } from "@/types/database"
-import { EnrichButton } from "@/components/shared/enrich-button"
+import { CompanyDetailHeader } from "./company-detail-header"
+import { CompanyOverviewTab } from "./company-overview-tab"
+import { CompanyTimelineTab } from "./company-timeline-tab"
+import { CompanyDocumentsTab } from "./company-documents-tab"
+import { CompanyNextStepsTab } from "./company-next-steps-tab"
 
 interface CompanyDetailCardProps {
   companyId: string
@@ -47,98 +49,30 @@ export function CompanyDetailCard({ companyId }: CompanyDetailCardProps) {
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <div className="flex items-start justify-between">
-            <div className="flex items-center gap-4">
-              <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-primary/10 text-xl font-semibold text-primary">
-                <Building2 className="h-8 w-8" />
-              </div>
-              <div>
-                <h2 className="text-xl font-bold">{company.name}</h2>
-                <div className="flex flex-wrap gap-2 mt-1">
-                  {company.industry && <Badge variant="outline">{company.industry}</Badge>}
-                  {company.size_tier && <Badge variant="secondary">{company.size_tier}</Badge>}
-                </div>
-              </div>
-            </div>
-            <EnrichButton type="company" id={company.id} onEnriched={load} />
-          </div>
+          <CompanyDetailHeader company={company} onEnriched={load} />
         </CardHeader>
         <Separator />
-        <CardContent className="pt-4 space-y-3">
-          {company.description && (
-            <p className="text-sm">{company.description}</p>
-          )}
-          <div className="grid gap-3 sm:grid-cols-2">
-            {company.website && (
-              <a
-                href={company.website}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 text-sm text-primary hover:underline"
-              >
-                <Globe className="h-4 w-4" />
-                {company.domain || company.website}
-                <ExternalLink className="h-3 w-3" />
-              </a>
-            )}
-            {company.linkedin_url && (
-              <a
-                href={company.linkedin_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 text-sm text-primary hover:underline"
-              >
-                <Linkedin className="h-4 w-4" />
-                LinkedIn Profile
-                <ExternalLink className="h-3 w-3" />
-              </a>
-            )}
-            {company.employee_count && (
-              <div className="flex items-center gap-2 text-sm">
-                <Users className="h-4 w-4 text-muted-foreground" />
-                {company.employee_count.toLocaleString()} employees
-              </div>
-            )}
-            {company.estimated_revenue && (
-              <div className="text-sm">
-                Revenue: ${company.estimated_revenue.toLocaleString()}
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <h3 className="font-semibold flex items-center gap-2">
-            <Users className="h-4 w-4" />
-            People ({people.length})
-          </h3>
-        </CardHeader>
-        <CardContent>
-          {people.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No people associated with this company.</p>
-          ) : (
-            <div className="space-y-2">
-              {people.map((person) => (
-                <Link
-                  key={person.id}
-                  href={`/people/${person.id}`}
-                  className="flex items-center justify-between rounded-md border p-3 hover:bg-muted"
-                >
-                  <div>
-                    <p className="text-sm font-medium">{person.full_name}</p>
-                    {person.current_title && (
-                      <p className="text-xs text-muted-foreground">{person.current_title}</p>
-                    )}
-                  </div>
-                  {person.email && (
-                    <span className="text-xs text-muted-foreground">{person.email}</span>
-                  )}
-                </Link>
-              ))}
-            </div>
-          )}
+        <CardContent className="pt-4">
+          <Tabs defaultValue="overview">
+            <TabsList variant="line">
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="timeline">Timeline</TabsTrigger>
+              <TabsTrigger value="documents">Documents</TabsTrigger>
+              <TabsTrigger value="next-steps">Next Steps</TabsTrigger>
+            </TabsList>
+            <TabsContent value="overview" className="mt-4">
+              <CompanyOverviewTab company={company} people={people} />
+            </TabsContent>
+            <TabsContent value="timeline" className="mt-4">
+              <CompanyTimelineTab companyId={companyId} />
+            </TabsContent>
+            <TabsContent value="documents" className="mt-4">
+              <CompanyDocumentsTab companyId={companyId} />
+            </TabsContent>
+            <TabsContent value="next-steps" className="mt-4">
+              <CompanyNextStepsTab companyId={companyId} />
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
     </div>

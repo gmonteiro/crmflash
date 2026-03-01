@@ -91,3 +91,36 @@ export const IMPORTABLE_FIELDS = [
   { value: 'notes', label: 'Notes' },
   { value: '__skip__', label: '(Skip this column)' },
 ] as const
+
+export const ACTIVITY_TYPES = [
+  { value: 'meeting', label: 'Meeting', color: '#6366f1' },
+  { value: 'call', label: 'Call', color: '#3b82f6' },
+  { value: 'email', label: 'Email', color: '#10b981' },
+  { value: 'note', label: 'Note', color: '#f59e0b' },
+  { value: 'document_uploaded', label: 'Document Uploaded', color: '#8b5cf6' },
+  { value: 'next_step_created', label: 'Next Step Created', color: '#ec4899' },
+] as const
+
+export const DOCUMENT_TYPES = [
+  { value: 'contract', label: 'Contract' },
+  { value: 'proposal', label: 'Proposal' },
+  { value: 'invoice', label: 'Invoice' },
+  { value: 'report', label: 'Report' },
+  { value: 'other', label: 'Other' },
+] as const
+
+export const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
+
+export const ALLOWED_FILE_TYPES = [
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/webp',
+  'text/plain',
+  'text/csv',
+]

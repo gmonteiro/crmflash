@@ -35,3 +35,25 @@ export const kanbanColumnSchema = z.object({
 })
 
 export type KanbanColumnFormData = z.infer<typeof kanbanColumnSchema>
+
+export const activitySchema = z.object({
+  type: z.enum(['meeting', 'call', 'email', 'note']),
+  title: z.string().min(1, 'Title is required'),
+  description: z.string().optional().or(z.literal('')),
+  date: z.string().min(1, 'Date is required'),
+})
+
+export type ActivityFormData = z.infer<typeof activitySchema>
+
+export const nextStepSchema = z.object({
+  title: z.string().min(1, 'Title is required'),
+  description: z.string().optional().or(z.literal('')),
+  due_date: z.string().optional().or(z.literal('')),
+})
+
+export type NextStepFormData = z.infer<typeof nextStepSchema>
+
+export const documentUploadSchema = z.object({
+  doc_type: z.enum(['contract', 'proposal', 'invoice', 'report', 'other']),
+  description: z.string().optional().or(z.literal('')),
+})

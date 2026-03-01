@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { Users, Building2, Kanban, Upload, Settings, Zap, LayoutDashboard, PanelLeftClose, PanelLeft } from "lucide-react"
+import { Users, Building2, Kanban, CalendarDays, Upload, Settings, Zap, LayoutDashboard, PanelLeftClose, PanelLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 const navItems = [
@@ -11,6 +11,7 @@ const navItems = [
   { href: "/people", label: "People", icon: Users },
   { href: "/companies", label: "Companies", icon: Building2 },
   { href: "/kanban", label: "Kanban", icon: Kanban },
+  { href: "/calendar", label: "Calendar", icon: CalendarDays },
   { href: "/import", label: "Import", icon: Upload },
   { href: "/settings", label: "Settings", icon: Settings },
 ]
