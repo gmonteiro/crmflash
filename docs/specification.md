@@ -90,9 +90,12 @@ CRM pessoal para gerenciar contatos profissionais (People), empresas (Companies)
    - Dropdown para ajuste manual
    - Opcao "(Skip this column)"
 3. **Preview** — Tabela com validacao por linha (verde/vermelho)
-   - Mostra erros (ex: email invalido, nome faltando)
-4. **Execution** — Barra de progresso, batch insert (50 por vez)
-   - Auto-cria companies se `current_company` preenchido
+   - Mostra erros (ex: email invalido, nome faltando, duplicata no arquivo)
+   - Dedup intra-file: detecta linhas duplicadas por nome + titulo + empresa (case-insensitive)
+4. **Execution** — Barra de progresso, batch insert (500 por vez)
+   - Dedup database: skipa pessoas que ja existem (chave: first_name + last_name + current_title + current_company)
+   - Auto-cria companies se `current_company` preenchido (dedup case-insensitive por nome)
+   - Mostra contagem de duplicatas skipadas nos resultados
    - Grava import_history com resultados
 
 ### 4.2 Parsing

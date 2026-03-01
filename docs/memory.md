@@ -208,10 +208,33 @@ Log corrido de todas as decisoes, ajustes, bugs e mudancas de rumo.
 - Supabase suporta ate 1000 rows por insert
 - 4000 rows agora faz 8 batches ao inves de 80
 
-### Chunked Validation
-- **Problema:** `confirmMapping()` validava 4000 rows sincronamente, travando UI
-- **Solucao:** Processar em chunks de 500 com `setTimeout(_, 0)` para yield ao UI thread
-- **Novo step:** `"validating"` entre `"mapping"` e `"preview"` com progress bar
-
 ### Build
 - `npm run build` passa com zero erros (scale import)
+
+---
+
+## 2026-02-28 — Validation Performance + Import Deduplication
+
+### Validation: Removido Chunked setTimeout
+- **Problema:** `setTimeout(_, 0)` + React re-render por chunk era mais lento que a validacao em si
+- **Solucao:** Validacao sincrona com `.map()` — `validateRow` e pure string ops, <200ms para 100k rows
+- **Resultado:** Removido step `"validating"` e progress bar. Mapping → Preview instantaneo
+- **Cleanup:** Removido `validatingProgress` state, `Progress` import, step indicator mapping
+
+### Import Deduplication (2 camadas)
+- **Intra-file (preview):** Detecta duplicatas DENTRO do mesmo arquivo
+  - Chave primaria: `first_name + last_name + current_title + current_company` (case-insensitive)
+  - Marca como erro na validacao, aparece no preview
+- **Database (execution):** Detecta duplicatas contra pessoas JA existentes no banco
+  - Mesma chave: `first_name + last_name + current_title + current_company`
+  - Fetch ALL existing people com `.limit(50000)` (fix: Supabase default e 1000)
+  - Rows duplicadas sao silenciosamente skipadas, contadas como "X duplicates skipped"
+- **Companies:** Fetch ALL companies do usuario em 1 query, match case-insensitive por nome
+  - Fix: `.limit(50000)` para nao truncar em 1000
+
+### UI: Import Results
+- Novo campo `skipped` no results object
+- `ImportProgress` mostra "X duplicates skipped" com icone amarelo
+
+### Git config
+- Email do repo atualizado de `gabriel.monteiro@vtex.com` para `gq.monteiro@gmail.com`
