@@ -14,7 +14,7 @@ export function validateRow(
 
   for (const [sourceCol, targetField] of Object.entries(mapping)) {
     if (targetField === "__skip__") continue
-    const value = (row[sourceCol] || "").trim()
+    const value = String(row[sourceCol] ?? "").trim()
     data[targetField] = value
   }
 
