@@ -153,25 +153,36 @@ export function useBulkEnrich() {
           body: JSON.stringify({ companyIds: batch.map((b) => b.id), provider: getSelectedProvider() }),
         })
 
-        await parseSSEStream(res, (event) => {
-          if (event.type === "reasoning") {
-            setState((prev) => ({ ...prev, reasoning: prev.reasoning + event.text }))
-          }
-          if (event.type === "batch_item") {
-            if (event.success) succeeded++
-            else failed++
-            setState((prev) => ({
-              ...prev,
-              current: Math.min(i + succeeded + failed, items.length),
-              succeeded,
-              failed,
-            }))
-          }
-        })
+        if (!res.ok) {
+          // Non-200 response (e.g. 429 rate limit) — count batch as failed
+          failed += batch.length
+          setState((prev) => ({ ...prev, succeeded, failed }))
+        } else {
+          await parseSSEStream(res, (event) => {
+            if (event.type === "reasoning") {
+              setState((prev) => ({ ...prev, reasoning: prev.reasoning + event.text }))
+            }
+            if (event.type === "batch_item") {
+              if (event.success) succeeded++
+              else failed++
+              setState((prev) => ({
+                ...prev,
+                current: Math.min(i + succeeded + failed, items.length),
+                succeeded,
+                failed,
+              }))
+            }
+          })
+        }
       } catch {
         // If batch fails entirely, count all as failed
         failed += batch.length
         setState((prev) => ({ ...prev, succeeded, failed }))
+      }
+
+      // Small delay between batches to avoid hammering the API
+      if (i + 5 < items.length && !cancelRef.current) {
+        await new Promise((resolve) => setTimeout(resolve, 500))
       }
     }
 

@@ -34,11 +34,15 @@ export default function CompaniesPage() {
   const [page, setPage] = useState(0)
   const [formOpen, setFormOpen] = useState(false)
   const [enrichOpen, setEnrichOpen] = useState(false)
+  const [sortBy, setSortBy] = useState<string>("created_at")
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc")
 
   const { companies, loading, pageCount, refetch, createCompany, deleteCompany } = useCompanies({
     search: search || undefined,
     industry: industry !== "all" ? industry : undefined,
     page,
+    sortBy,
+    sortDirection,
   })
 
   const bulk = useBulkEnrich()
@@ -48,6 +52,16 @@ export default function CompaniesPage() {
     if (company) toast.success("Company created")
     else toast.error("Failed to create company")
   }, [createCompany])
+
+  const handleSortChange = useCallback((column: string) => {
+    if (column === sortBy) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"))
+    } else {
+      setSortBy(column)
+      setSortDirection("asc")
+    }
+    setPage(0)
+  }, [sortBy])
 
   const handleDelete = useCallback(async (id: string) => {
     const success = await deleteCompany(id)
@@ -60,6 +74,7 @@ export default function CompaniesPage() {
     const { data } = await supabase
       .from("companies")
       .select("id, name, industry, description, employee_count, estimated_revenue, size_tier")
+      .limit(5000)
 
     if (!data || data.length === 0) {
       toast.error("No companies found")
@@ -132,6 +147,9 @@ export default function CompaniesPage() {
         pageCount={pageCount}
         onPageChange={setPage}
         onDelete={handleDelete}
+        sortBy={sortBy}
+        sortDirection={sortDirection}
+        onSortChange={handleSortChange}
       />
 
       <CompanyForm

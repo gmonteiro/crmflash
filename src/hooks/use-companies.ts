@@ -9,10 +9,12 @@ interface UseCompaniesOptions {
   industry?: string
   page?: number
   pageSize?: number
+  sortBy?: string
+  sortDirection?: "asc" | "desc"
 }
 
 export function useCompanies(options: UseCompaniesOptions = {}) {
-  const { search, industry, page = 0, pageSize = 25 } = options
+  const { search, industry, page = 0, pageSize = 25, sortBy, sortDirection } = options
   const [companies, setCompanies] = useState<Company[]>([])
   const [totalCount, setTotalCount] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -32,8 +34,10 @@ export function useCompanies(options: UseCompaniesOptions = {}) {
       query = query.eq("industry", industry)
     }
 
+    const sortCol = sortBy || "created_at"
+    const ascending = sortDirection === "asc"
     query = query
-      .order("created_at", { ascending: false })
+      .order(sortCol, { ascending, nullsFirst: false })
       .range(page * pageSize, (page + 1) * pageSize - 1)
 
     const { data, count, error } = await query
@@ -43,7 +47,7 @@ export function useCompanies(options: UseCompaniesOptions = {}) {
       setTotalCount(count ?? 0)
     }
     setLoading(false)
-  }, [search, industry, page, pageSize])
+  }, [search, industry, page, pageSize, sortBy, sortDirection])
 
   useEffect(() => {
     fetchCompanies()

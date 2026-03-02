@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     return jsonResponse({ error: "Forbidden" }, 403)
   }
 
-  const rl = rateLimit(rateLimitKey(request, "enrich-batch"), { limit: 5, windowMs: 60_000 })
+  const rl = rateLimit(rateLimitKey(request, "enrich-batch"), { limit: 100, windowMs: 60_000 })
   if (!rl.success) {
     return jsonResponse({ error: "Too many requests" }, 429)
   }

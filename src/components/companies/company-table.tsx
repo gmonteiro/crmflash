@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { MoreHorizontal, Eye, Trash2, ChevronLeft, ChevronRight } from "lucide-react"
+import { MoreHorizontal, Eye, Trash2, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
 import type { Company } from "@/types/database"
 import { safeHref } from "@/lib/utils"
 import Link from "next/link"
@@ -23,6 +23,37 @@ interface CompanyTableProps {
   pageCount: number
   onPageChange: (page: number) => void
   onDelete: (id: string) => void
+  sortBy?: string
+  sortDirection?: "asc" | "desc"
+  onSortChange: (column: string) => void
+}
+
+function SortHeader({
+  label,
+  column,
+  sortBy,
+  sortDirection,
+  onSortChange,
+}: {
+  label: string
+  column: string
+  sortBy?: string
+  sortDirection?: "asc" | "desc"
+  onSortChange: (column: string) => void
+}) {
+  const active = sortBy === column
+  const Icon = active ? (sortDirection === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="-ml-3 h-8"
+      onClick={() => onSortChange(column)}
+    >
+      {label}
+      <Icon className="ml-1 h-3.5 w-3.5" />
+    </Button>
+  )
 }
 
 export function CompanyTable({
@@ -32,11 +63,16 @@ export function CompanyTable({
   pageCount,
   onPageChange,
   onDelete,
+  sortBy,
+  sortDirection,
+  onSortChange,
 }: CompanyTableProps) {
   const columns: ColumnDef<Company>[] = [
     {
       accessorKey: "name",
-      header: "Name",
+      header: () => (
+        <SortHeader label="Name" column="name" sortBy={sortBy} sortDirection={sortDirection} onSortChange={onSortChange} />
+      ),
       cell: ({ row }) => (
         <Link
           href={`/companies/${row.original.id}`}
@@ -48,7 +84,9 @@ export function CompanyTable({
     },
     {
       accessorKey: "industry",
-      header: "Industry",
+      header: () => (
+        <SortHeader label="Industry" column="industry" sortBy={sortBy} sortDirection={sortDirection} onSortChange={onSortChange} />
+      ),
       cell: ({ row }) =>
         row.original.industry ? (
           <Badge variant="outline">{row.original.industry}</Badge>
@@ -56,7 +94,9 @@ export function CompanyTable({
     },
     {
       accessorKey: "size_tier",
-      header: "Size",
+      header: () => (
+        <SortHeader label="Size" column="size_tier" sortBy={sortBy} sortDirection={sortDirection} onSortChange={onSortChange} />
+      ),
       cell: ({ row }) =>
         row.original.size_tier ? (
           <Badge variant="secondary">{row.original.size_tier}</Badge>
@@ -64,7 +104,9 @@ export function CompanyTable({
     },
     {
       accessorKey: "employee_count",
-      header: "Employees",
+      header: () => (
+        <SortHeader label="Employees" column="employee_count" sortBy={sortBy} sortDirection={sortDirection} onSortChange={onSortChange} />
+      ),
       cell: ({ row }) => (
         <span className="text-sm text-muted-foreground">
           {row.original.employee_count?.toLocaleString() || "-"}
