@@ -115,6 +115,41 @@ export interface CompanyActivity {
   created_at: string
 }
 
+export type ActivitySource = 'manual' | 'transcription_app'
+
+export interface Activity {
+  id: string
+  user_id: string
+  person_id: string | null
+  company_id: string | null
+  type: 'meeting' | 'call' | 'email' | 'note'
+  title: string
+  date: string
+  description: string | null
+  source: ActivitySource
+  source_meeting_id: string | null
+  source_app_url: string | null
+  transcript: string | null
+  summary: {
+    executive_summary?: string
+    key_findings?: string[]
+    challenges?: string[]
+    opportunities?: string[]
+    action_items?: string[]
+  } | null
+  speakers: {
+    label: string
+    name: string | null
+    utterances: { text: string }[]
+  }[] | null
+  audio_url: string | null
+  created_at: string
+  updated_at: string
+  // Joined
+  person?: { id: string; full_name: string } | null
+  company?: { id: string; name: string } | null
+}
+
 export interface CompanyNextStep {
   id: string
   user_id: string

@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
+import { ActivityTimeline } from "@/components/shared/activity-timeline"
 
 export default function PersonDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -24,7 +25,13 @@ export default function PersonDetailPage({ params }: { params: Promise<{ id: str
       {loading ? (
         <Skeleton className="h-64 w-full" />
       ) : person ? (
-        <PersonDetailCard person={person} onUpdate={update} onRefetch={refetch} />
+        <>
+          <PersonDetailCard person={person} onUpdate={update} onRefetch={refetch} />
+          <div className="mt-6">
+            <h3 className="text-sm font-medium mb-3">Activities</h3>
+            <ActivityTimeline personId={id} />
+          </div>
+        </>
       ) : (
         <p className="text-muted-foreground">Person not found.</p>
       )}

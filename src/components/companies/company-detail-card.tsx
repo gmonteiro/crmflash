@@ -12,6 +12,7 @@ import { CompanyOverviewTab } from "./company-overview-tab"
 import { CompanyTimelineTab } from "./company-timeline-tab"
 import { CompanyDocumentsTab } from "./company-documents-tab"
 import { CompanyNextStepsTab } from "./company-next-steps-tab"
+import { ActivityTimeline } from "@/components/shared/activity-timeline"
 
 interface CompanyDetailCardProps {
   companyId: string
@@ -59,6 +60,7 @@ export function CompanyDetailCard({ companyId }: CompanyDetailCardProps) {
               <TabsTrigger value="timeline">Timeline</TabsTrigger>
               <TabsTrigger value="documents">Documents</TabsTrigger>
               <TabsTrigger value="next-steps">Next Steps</TabsTrigger>
+              <TabsTrigger value="activities">Activities</TabsTrigger>
             </TabsList>
             <TabsContent value="overview" className="mt-4">
               <CompanyOverviewTab company={company} people={people} />
@@ -71,6 +73,9 @@ export function CompanyDetailCard({ companyId }: CompanyDetailCardProps) {
             </TabsContent>
             <TabsContent value="next-steps" className="mt-4">
               <CompanyNextStepsTab companyId={companyId} />
+            </TabsContent>
+            <TabsContent value="activities" className="mt-4">
+              <ActivityTimeline companyId={companyId} />
             </TabsContent>
           </Tabs>
         </CardContent>
