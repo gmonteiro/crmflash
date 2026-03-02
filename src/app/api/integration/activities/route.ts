@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { validateIntegrationAuth } from '@/lib/auth/integration'
+import { integrationActivitySchema } from '@/lib/validators'
+import { rateLimit, rateLimitKey } from '@/lib/rate-limit'
 
 export async function POST(request: NextRequest) {
   const userId = validateIntegrationAuth(request)
@@ -8,7 +10,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const rl = rateLimit(rateLimitKey(request, 'integration-activity'), { limit: 30, windowMs: 60_000 })
+  if (!rl.success) {
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429 })
+  }
+
   const body = await request.json()
+  const parsed = integrationActivitySchema.safeParse(body)
+
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: 'Validation failed', details: parsed.error.flatten().fieldErrors },
+      { status: 400 }
+    )
+  }
+
   const {
     person_id,
     company_id,
@@ -20,19 +36,39 @@ export async function POST(request: NextRequest) {
     summary,
     speakers,
     audio_url,
-  } = body
-
-  if (!person_id && !company_id) {
-    return NextResponse.json(
-      { error: 'At least one of person_id or company_id is required' },
-      { status: 400 }
-    )
-  }
+  } = parsed.data
 
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
+
+  // Verify ownership: referenced person/company must belong to this user
+  if (person_id) {
+    const { data: person } = await supabase
+      .from('people')
+      .select('id')
+      .eq('id', person_id)
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    if (!person) {
+      return NextResponse.json({ error: 'Person not found' }, { status: 404 })
+    }
+  }
+
+  if (company_id) {
+    const { data: company } = await supabase
+      .from('companies')
+      .select('id')
+      .eq('id', company_id)
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    if (!company) {
+      return NextResponse.json({ error: 'Company not found' }, { status: 404 })
+    }
+  }
 
   // Dedup check: same meeting + same target = already sent
   if (source_meeting_id) {
@@ -86,7 +122,8 @@ export async function POST(request: NextRequest) {
     .single()
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error("Integration activity insert error:", error)
+    return NextResponse.json({ error: 'Failed to create activity' }, { status: 500 })
   }
 
   // Create next steps from action_items if summary provided and company_id exists

@@ -53,6 +53,25 @@ export const nextStepSchema = z.object({
 
 export type NextStepFormData = z.infer<typeof nextStepSchema>
 
+const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+export const integrationActivitySchema = z.object({
+  person_id: z.string().regex(uuidRegex, 'Invalid UUID').optional().nullable(),
+  company_id: z.string().regex(uuidRegex, 'Invalid UUID').optional().nullable(),
+  title: z.string().min(1).max(500),
+  date: z.string().optional(),
+  source_meeting_id: z.string().max(500).optional().nullable(),
+  source_app_url: z.string().url().max(2000).optional().nullable(),
+  transcript: z.string().max(500000).optional().nullable(),
+  summary: z.any().optional().nullable(),
+  speakers: z.any().optional().nullable(),
+  audio_url: z.string().url().max(2000).optional().nullable(),
+}).refine(data => data.person_id || data.company_id, {
+  message: 'At least one of person_id or company_id is required',
+})
+
+export type IntegrationActivityData = z.infer<typeof integrationActivitySchema>
+
 export const documentUploadSchema = z.object({
   doc_type: z.enum(['contract', 'proposal', 'invoice', 'report', 'other']),
   description: z.string().optional().or(z.literal('')),

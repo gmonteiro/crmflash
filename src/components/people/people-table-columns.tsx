@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { MoreHorizontal, ExternalLink, Trash2, Eye } from "lucide-react"
 import Link from "next/link"
+import { safeHref } from "@/lib/utils"
 
 interface ColumnOptions {
   onUpdate: (id: string, data: Partial<Person>) => void
@@ -107,9 +108,9 @@ export function getPeopleColumns({ onUpdate, onDelete }: ColumnOptions): ColumnD
                   View Details
                 </Link>
               </DropdownMenuItem>
-              {person.linkedin_url && (
+              {safeHref(person.linkedin_url) && (
                 <DropdownMenuItem asChild>
-                  <a href={person.linkedin_url} target="_blank" rel="noopener noreferrer">
+                  <a href={safeHref(person.linkedin_url)!} target="_blank" rel="noopener noreferrer">
                     <ExternalLink className="mr-2 h-4 w-4" />
                     LinkedIn
                   </a>

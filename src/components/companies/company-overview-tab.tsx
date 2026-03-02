@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Globe, Linkedin, Users, ExternalLink } from "lucide-react"
 import Link from "next/link"
 import type { Company, Person } from "@/types/database"
+import { safeHref } from "@/lib/utils"
 
 interface CompanyOverviewTabProps {
   company: Company
@@ -18,9 +19,9 @@ export function CompanyOverviewTab({ company, people }: CompanyOverviewTabProps)
           <p className="text-sm">{company.description}</p>
         )}
         <div className="grid gap-3 sm:grid-cols-2">
-          {company.website && (
+          {safeHref(company.website) && (
             <a
-              href={company.website}
+              href={safeHref(company.website)}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 text-sm text-primary hover:underline"
@@ -30,9 +31,9 @@ export function CompanyOverviewTab({ company, people }: CompanyOverviewTabProps)
               <ExternalLink className="h-3 w-3" />
             </a>
           )}
-          {company.linkedin_url && (
+          {safeHref(company.linkedin_url) && (
             <a
-              href={company.linkedin_url}
+              href={safeHref(company.linkedin_url)}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 text-sm text-primary hover:underline"

@@ -1,5 +1,7 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server"
 import { getEnrichProvider } from "@/lib/enrich"
+import { verifyCsrfOrigin } from "@/lib/utils"
+import { rateLimit, rateLimitKey } from "@/lib/rate-limit"
 import type { EnrichSSEEvent, CompanyHints, CompanyEnrichResult } from "@/lib/enrich"
 
 export const maxDuration = 120
@@ -23,6 +25,15 @@ function isNonEmpty(result: CompanyEnrichResult): boolean {
 }
 
 export async function POST(request: Request) {
+  if (!verifyCsrfOrigin(request)) {
+    return jsonResponse({ error: "Forbidden" }, 403)
+  }
+
+  const rl = rateLimit(rateLimitKey(request, "enrich-batch"), { limit: 5, windowMs: 60_000 })
+  if (!rl.success) {
+    return jsonResponse({ error: "Too many requests" }, 429)
+  }
+
   const { companyIds, provider: requestedProvider } = await request.json()
   const validProviders = ["openai", "anthropic", "perplexity", "exa"] as const
   const provider = validProviders.includes(requestedProvider) ? requestedProvider : undefined

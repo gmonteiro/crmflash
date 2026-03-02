@@ -70,6 +70,8 @@ export function useCompanies(options: UseCompaniesOptions = {}) {
 
   async function updateCompany(id: string, data: Partial<Company>) {
     const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return false
 
     setCompanies((prev) =>
       prev.map((c) => (c.id === id ? { ...c, ...data } : c))
@@ -79,6 +81,7 @@ export function useCompanies(options: UseCompaniesOptions = {}) {
       .from("companies")
       .update(data)
       .eq("id", id)
+      .eq("user_id", user.id)
 
     if (error) {
       fetchCompanies()
@@ -89,6 +92,8 @@ export function useCompanies(options: UseCompaniesOptions = {}) {
 
   async function deleteCompany(id: string) {
     const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return false
 
     setCompanies((prev) => prev.filter((c) => c.id !== id))
     setTotalCount((prev) => prev - 1)
@@ -97,6 +102,7 @@ export function useCompanies(options: UseCompaniesOptions = {}) {
       .from("companies")
       .delete()
       .eq("id", id)
+      .eq("user_id", user.id)
 
     if (error) {
       fetchCompanies()

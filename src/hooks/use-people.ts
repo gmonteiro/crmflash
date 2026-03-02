@@ -79,6 +79,8 @@ export function usePeople(options: UsePeopleOptions = {}) {
 
   async function updatePerson(id: string, data: Partial<Person>) {
     const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return false
 
     // Optimistic update
     setPeople((prev) =>
@@ -89,6 +91,7 @@ export function usePeople(options: UsePeopleOptions = {}) {
       .from("people")
       .update(data)
       .eq("id", id)
+      .eq("user_id", user.id)
 
     if (error) {
       fetchPeople() // Revert on error
@@ -99,6 +102,8 @@ export function usePeople(options: UsePeopleOptions = {}) {
 
   async function deletePerson(id: string) {
     const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return false
 
     setPeople((prev) => prev.filter((p) => p.id !== id))
     setTotalCount((prev) => prev - 1)
@@ -107,6 +112,7 @@ export function usePeople(options: UsePeopleOptions = {}) {
       .from("people")
       .delete()
       .eq("id", id)
+      .eq("user_id", user.id)
 
     if (error) {
       fetchPeople()
@@ -149,10 +155,14 @@ export function usePerson(id: string) {
 
   async function update(data: Partial<Person>) {
     const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return false
+
     const { error } = await supabase
       .from("people")
       .update(data)
       .eq("id", id)
+      .eq("user_id", user.id)
 
     if (!error) {
       setPerson((prev) => prev ? { ...prev, ...data } : prev)

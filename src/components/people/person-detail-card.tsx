@@ -12,6 +12,7 @@ import { Separator } from "@/components/ui/separator"
 import { ExternalLink, Mail, Phone, Building2, Pencil, Check, X, Linkedin } from "lucide-react"
 import Link from "next/link"
 import { EnrichButton } from "@/components/shared/enrich-button"
+import { safeHref } from "@/lib/utils"
 
 interface PersonDetailCardProps {
   person: Person
@@ -162,9 +163,9 @@ export function PersonDetailCard({ person, onUpdate, onRefetch }: PersonDetailCa
                 onChange={(e) => setEditData((d) => ({ ...d, linkedin_url: e.target.value }))}
                 className="h-8"
               />
-            ) : person.linkedin_url ? (
+            ) : safeHref(person.linkedin_url) ? (
               <a
-                href={person.linkedin_url}
+                href={safeHref(person.linkedin_url)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 text-sm text-primary hover:underline"

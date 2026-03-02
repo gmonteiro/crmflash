@@ -1,5 +1,7 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server"
 import { getEnrichProvider } from "@/lib/enrich"
+import { verifyCsrfOrigin } from "@/lib/utils"
+import { rateLimit, rateLimitKey } from "@/lib/rate-limit"
 import type { EnrichSSEEvent } from "@/lib/enrich"
 
 export const maxDuration = 60
@@ -19,6 +21,15 @@ function hasRequiredApiKey(provider: string): boolean {
 }
 
 export async function POST(request: Request) {
+  if (!verifyCsrfOrigin(request)) {
+    return jsonResponse({ error: "Forbidden" }, 403)
+  }
+
+  const rl = rateLimit(rateLimitKey(request, "enrich"), { limit: 20, windowMs: 60_000 })
+  if (!rl.success) {
+    return jsonResponse({ error: "Too many requests" }, 429)
+  }
+
   const { type, personId, companyId, provider: requestedProvider } = await request.json()
   const validProviders = ["openai", "anthropic", "perplexity", "exa"] as const
   const provider = validProviders.includes(requestedProvider) ? requestedProvider : undefined
@@ -115,9 +126,10 @@ export async function POST(request: Request) {
           .from("people")
           .update(update)
           .eq("id", personId)
+          .eq("user_id", user.id)
 
         if (error) {
-          await sendEvent({ type: "error", message: error.message })
+          await sendEvent({ type: "error", message: "Failed to update person" })
         } else {
           await sendEvent({ type: "result", success: true, enriched })
         }
@@ -177,9 +189,10 @@ export async function POST(request: Request) {
             .from("companies")
             .update(update)
             .eq("id", companyId)
+            .eq("user_id", user.id)
 
           if (error) {
-            await sendEvent({ type: "error", message: error.message })
+            await sendEvent({ type: "error", message: "Failed to update company" })
             await writer.close()
             return
           }
@@ -188,7 +201,8 @@ export async function POST(request: Request) {
         await sendEvent({ type: "result", success: true, enriched })
       }
     } catch (err) {
-      await sendEvent({ type: "error", message: (err as Error).message })
+      console.error("Enrich error:", err)
+      await sendEvent({ type: "error", message: "An unexpected error occurred" })
     } finally {
       await writer.close()
     }

@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { toast } from "sonner"
 import { Loader2, Zap } from "lucide-react"
+import { sanitizeRedirect } from "@/lib/utils"
 
 function LoginForm() {
   const [email, setEmail] = useState("")
@@ -17,7 +18,7 @@ function LoginForm() {
   const [loading, setLoading] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
-  const redirectTo = searchParams.get("redirect") || "/dashboard"
+  const redirectTo = sanitizeRedirect(searchParams.get("redirect"))
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()

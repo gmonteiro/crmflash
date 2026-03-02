@@ -52,10 +52,14 @@ export function useCompanyActivities(companyId: string) {
     setActivities((prev) => prev.filter((a) => a.id !== id))
 
     const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { fetchActivities(); return false }
+
     const { error } = await supabase
       .from("company_activities")
       .delete()
       .eq("id", id)
+      .eq("user_id", user.id)
 
     if (error) {
       fetchActivities()

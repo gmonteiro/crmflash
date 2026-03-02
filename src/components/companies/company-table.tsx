@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { MoreHorizontal, Eye, Trash2, ChevronLeft, ChevronRight } from "lucide-react"
 import type { Company } from "@/types/database"
+import { safeHref } from "@/lib/utils"
 import Link from "next/link"
 
 interface CompanyTableProps {
@@ -74,9 +75,9 @@ export function CompanyTable({
       accessorKey: "website",
       header: "Website",
       cell: ({ row }) =>
-        row.original.website ? (
+        safeHref(row.original.website) ? (
           <a
-            href={row.original.website}
+            href={safeHref(row.original.website)}
             target="_blank"
             rel="noopener noreferrer"
             className="text-sm text-primary hover:underline"

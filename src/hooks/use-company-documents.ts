@@ -36,7 +36,9 @@ export function useCompanyDocuments(companyId: string) {
     if (!user) return null
 
     const fileId = crypto.randomUUID()
-    const filePath = `${user.id}/${companyId}/${fileId}_${file.name}`
+    // Sanitize filename: remove path separators and dangerous chars
+    const safeName = file.name.replace(/[/\\:*?"<>|]/g, "_").replace(/\.{2,}/g, "_")
+    const filePath = `${user.id}/${companyId}/${fileId}_${safeName}`
 
     // Upload to Supabase Storage
     const { error: uploadError } = await supabase.storage
@@ -92,6 +94,8 @@ export function useCompanyDocuments(companyId: string) {
     setDocuments((prev) => prev.filter((d) => d.id !== doc.id))
 
     const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { fetchDocuments(); return false }
 
     // Delete file from storage
     await supabase.storage
@@ -103,6 +107,7 @@ export function useCompanyDocuments(companyId: string) {
       .from("company_documents")
       .delete()
       .eq("id", doc.id)
+      .eq("user_id", user.id)
 
     if (error) {
       fetchDocuments()

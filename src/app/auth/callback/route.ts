@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { sanitizeRedirect } from '@/lib/utils'
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
-  const redirectTo = searchParams.get('redirect') || '/dashboard'
+  const redirectTo = sanitizeRedirect(searchParams.get('redirect'))
 
   if (code) {
     const supabase = await createServerSupabaseClient()

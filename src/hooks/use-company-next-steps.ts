@@ -65,10 +65,14 @@ export function useCompanyNextSteps(companyId: string) {
     )
 
     const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { fetchSteps(); return false }
+
     const { error } = await supabase
       .from("company_next_steps")
       .update({ status: newStatus, completed_at: completedAt })
       .eq("id", id)
+      .eq("user_id", user.id)
 
     if (error) {
       fetchSteps()
@@ -81,10 +85,14 @@ export function useCompanyNextSteps(companyId: string) {
     setSteps((prev) => prev.filter((s) => s.id !== id))
 
     const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { fetchSteps(); return false }
+
     const { error } = await supabase
       .from("company_next_steps")
       .delete()
       .eq("id", id)
+      .eq("user_id", user.id)
 
     if (error) {
       fetchSteps()
