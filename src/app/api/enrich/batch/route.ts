@@ -124,6 +124,7 @@ export async function POST(request: Request) {
           .from("companies")
           .update(update)
           .eq("id", id)
+          .eq("user_id", user!.id)
 
         return !error
       }
@@ -177,7 +178,8 @@ export async function POST(request: Request) {
 
       await sendEvent({ type: "done", succeeded, failed })
     } catch (err) {
-      await sendEvent({ type: "error", message: (err as Error).message })
+      console.error("Batch enrich error:", err)
+      await sendEvent({ type: "error", message: "An unexpected error occurred" })
     } finally {
       await writer.close()
     }
