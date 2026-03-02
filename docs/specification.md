@@ -71,9 +71,32 @@ CRM pessoal para gerenciar contatos profissionais (People), empresas (Companies)
 - Campos: name*, domain, linkedin_url, industry (select), size_tier (select), estimated_revenue, employee_count, description, website
 
 ### 3.3 Detail Page (`/companies/[id]`)
-- Card com icone, nome, badges (industry, size_tier), descricao, website, linkedin, employee count, revenue
+- Header com icone, nome, badges (industry, size_tier), botao "Enrich" (AI)
+- Tabs: Overview | Timeline | Documents | Next Steps
+
+#### 3.3.1 Overview Tab
+- Descricao, website, linkedin, employee count, revenue
 - Lista de People associadas (link para cada)
-- Botao "Enrich" (AI) no header
+
+#### 3.3.2 Timeline Tab
+- Quick note input (textarea + Save, Ctrl+Enter shortcut)
+- "Add Activity" dialog: type (meeting/call/email/note), title, description, datetime
+- Vertical timeline com dots coloridos por tipo (meeting=indigo, call=blue, email=green, note=amber)
+- Auto-entries: document_uploaded (purple), next_step_created (pink) — styling muted
+- Sorted newest first
+
+#### 3.3.3 Documents Tab
+- "Upload" dialog: drag-drop file zone + doc_type select (contract/proposal/invoice/report/other) + description
+- File list: icon por mime type, name, type badge, size, date, download/delete
+- Upload: file → Supabase Storage (`company-documents` bucket) → metadata row → auto-activity
+- Download: signed URL (1hr TTL), abre em nova tab
+- Max 10MB, tipos: PDF, DOCX, images, text, Excel
+
+#### 3.3.4 Next Steps Tab
+- "Add" dialog: title, description, due_date
+- Lista: checkbox (toggle complete), title, due date, badge "Overdue" se passada
+- Criar step auto-cria activity no timeline
+- Completed items no fundo com strikethrough
 
 ### 3.4 Exclusao
 - Delete otimista
@@ -189,32 +212,56 @@ CRM pessoal para gerenciar contatos profissionais (People), empresas (Companies)
 
 ---
 
-## Modulo 8: Settings
+## Modulo 8: Calendar (`/calendar`)
 
-### 8.1 Aparencia
+### 8.1 Grid Mensal
+- 7 colunas (Sun-Sat) × 5-6 linhas
+- Cada celula: numero do dia + dots coloridos (vermelho=overdue, azul=pending, cinza=completed)
+- Dia atual destacado com circulo primary
+
+### 8.2 Navegacao
+- Botoes < prev | Month Year | next >
+- Troca de mes refaz fetch
+
+### 8.3 Painel de Detalhe
+- Click em dia abre painel abaixo do grid
+- Mostra next steps de TODAS as empresas naquele dia
+- Cada item: checkbox, titulo, link para empresa, badge overdue
+- Toggle completion atualiza status in-place
+
+### 8.4 Data
+- Hook `useCalendar`: query `company_next_steps` joined com `companies(id, name)`
+- Filtrado por `due_date` entre startOfMonth e endOfMonth
+- Agrupado por due_date string
+
+---
+
+## Modulo 9: Settings
+
+### 9.1 Aparencia
 - Seletor de tema: Light / Dark / System
 - Persiste via next-themes (localStorage)
 
-### 8.2 AI Enrichment
+### 9.2 AI Enrichment
 - Campo para Anthropic API Key (informativo)
 - Instrucoes para configurar `ANTHROPIC_API_KEY` no `.env.local`
 
 ---
 
-## Modulo 9: Polish / UX
+## Modulo 10: Polish / UX
 
-### 9.1 Dark Mode
+### 10.1 Dark Mode
 - Suporte completo via Tailwind + next-themes
 
-### 9.2 Responsividade
+### 10.2 Responsividade
 - Layout com sidebar colapsavel em mobile
 - Tabelas com scroll horizontal
 - Kanban com scroll horizontal
 
-### 9.3 Skeletons
+### 10.3 Skeletons
 - Loading skeletons em todas as paginas que buscam dados
 
-### 9.4 Toasts
+### 10.4 Toasts
 - Feedback visual para todas as acoes (sucesso/erro) via sonner
 
 ---
@@ -224,12 +271,20 @@ CRM pessoal para gerenciar contatos profissionais (People), empresas (Companies)
 ### Tabelas
 | Tabela | Campos principais |
 |--------|-------------------|
-| `companies` | id, user_id, name, domain, linkedin_url, industry, size_tier, estimated_revenue, employee_count, description, logo_url, website, metadata |
+| `companies` | id, user_id, name, domain, linkedin_url, industry, size_tier, estimated_revenue, employee_count, description, logo_url, website, metadata, kanban_column_id, kanban_position |
 | `people` | id, user_id, first_name, last_name, full_name (generated), email, phone, linkedin_url, current_title, current_company, company_id (FK), category, notes, avatar_url, linkedin_enriched_at, kanban_column_id (FK), kanban_position |
 | `kanban_columns` | id, user_id, title, color, position |
 | `tags` | id, user_id, name, color |
 | `people_tags` | person_id, tag_id (composite PK) |
 | `import_history` | id, user_id, filename, file_type, row_count, success_count, error_count, column_mapping, errors, status, completed_at |
+| `company_documents` | id, user_id, company_id (FK), name, file_path, file_size, mime_type, doc_type, description |
+| `company_activities` | id, user_id, company_id (FK), type, title, description, date |
+| `company_next_steps` | id, user_id, company_id (FK), title, description, due_date, status, completed_at |
+
+### Storage Buckets
+| Bucket | Acesso | Estrutura |
+|--------|--------|-----------|
+| `company-documents` | Privado (RLS) | `{user_id}/{company_id}/{uuid}_{filename}` |
 
 ### RLS
 - Todas as tabelas com RLS habilitado

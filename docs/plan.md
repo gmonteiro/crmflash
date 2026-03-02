@@ -117,17 +117,42 @@
 
 ---
 
-## Fase 7: Deploy + Testes (PENDENTE)
-**Dependencias:** Fases 1-6
+## Fase 7: Company Detail — Documents, Timeline, Next Steps & Calendar
+**Dependencias:** Fases 2, 6
+**Entregavel:** Company page como hub de gerenciamento ativo + pagina Calendar
+
+1. Migration `003_company_details.sql` (3 tabelas + storage bucket)
+2. Types, validators, constants para novas entidades
+3. Instalar `date-fns`
+4. Hook `useCompanyNextSteps` — CRUD + toggleComplete + auto-activity
+5. Hook `useCompanyActivities` — CRUD, sorted by date DESC
+6. Hook `useCompanyDocuments` — CRUD + Storage upload/download/delete + auto-activity
+7. Hook `useCalendar` — fetch month range across all companies
+8. Extrair header e overview de CompanyDetailCard
+9. Criar tabs: Timeline, Documents, Next Steps
+10. Criar dialogs: ActivityFormDialog, DocumentUploadDialog, NextStepFormDialog
+11. Criar CalendarView (monthly grid + day detail)
+12. Criar rota `/calendar` + nav item no sidebar
+
+**Status:** CONCLUIDO
+
+---
+
+## Fase 8: Deploy + Testes (PENDENTE)
+**Dependencias:** Fases 1-7
 **Entregavel:** App funcionando em producao
 
-1. Rodar SQL migration no Supabase
+1. Rodar SQL migrations no Supabase (001, 002, 003)
 2. Testar fluxo completo de auth
 3. Testar CRUD people + companies
 4. Testar import CSV/XLSX
-5. Testar kanban (add person, drag, reorder)
+5. Testar kanban (add company, drag, reorder)
 6. Testar enrichment (person + company)
-7. Configurar ANTHROPIC_API_KEY
-8. (Opcional) Deploy no Vercel
+7. Testar documents (upload, download, delete)
+8. Testar timeline (quick note, add activity, auto-entries)
+9. Testar next steps (create, toggle complete, overdue)
+10. Testar calendar (month nav, day detail, toggle from calendar)
+11. Configurar ANTHROPIC_API_KEY
+12. (Opcional) Deploy no Vercel
 
 **Status:** PENDENTE

@@ -250,3 +250,64 @@ Log corrido de todas as decisoes, ajustes, bugs e mudancas de rumo.
 
 ### Git config
 - Email do repo atualizado de `gabriel.monteiro@vtex.com` para `gq.monteiro@gmail.com`
+
+---
+
+## 2026-03-01 — Company Detail: Documents, Timeline, Next Steps & Calendar
+
+### Migration 003: company_details.sql
+- 3 novas tabelas: `company_documents`, `company_activities`, `company_next_steps`
+- Bucket Supabase Storage `company-documents` (privado, RLS via folder structure `{user_id}/{company_id}/{uuid}_{filename}`)
+- RLS em todas as 3 tabelas + storage policies com `foldername(name)[1] = auth.uid()`
+- Indexes compostos: `(user_id, status, due_date)` em next_steps para calendar queries
+- Triggers `handle_updated_at` em documents e next_steps
+
+### Company Detail Page: Tabs
+- **Antes:** Card unico com header + body (descricao, links, people)
+- **Depois:** Header extraido + Tabs (Overview | Timeline | Documents | Next Steps)
+- Componentes extraidos: `company-detail-header.tsx`, `company-overview-tab.tsx`
+- Novos: `company-timeline-tab.tsx`, `company-documents-tab.tsx`, `company-next-steps-tab.tsx`
+- Tabs usam variant="line" do shadcn (underline style)
+
+### Documents Tab
+- Upload via Supabase Storage (`company-documents` bucket)
+- File path: `{user_id}/{company_id}/{uuid}_{filename}`
+- Download via signed URL (1hr TTL)
+- Tipos: PDF, DOCX, images, text, Excel — max 10MB
+- `doc_type`: contract, proposal, invoice, report, other
+- Upload auto-cria activity no timeline (`document_uploaded`)
+
+### Timeline Tab
+- Quick note input (textarea + Ctrl+Enter para salvar)
+- "Add Activity" dialog: type (meeting/call/email/note), title, description, datetime
+- Vertical timeline com dots coloridos por tipo e icones
+- Auto-entries (document_uploaded, next_step_created) com styling muted
+- Sorted newest first
+
+### Next Steps Tab
+- Lista com checkboxes (toggle pending/completed)
+- Due date com badge "Overdue" se passada
+- Completed items no fundo com strikethrough e opacity
+- Criar step auto-cria activity no timeline (`next_step_created`)
+
+### Calendar Page (`/calendar`)
+- Nova rota + nav item no sidebar (CalendarDays icon, entre Kanban e Import)
+- Grid mensal (7 cols × 5-6 rows) com dots coloridos por status
+- Click em dia abre painel com next steps de TODAS as empresas
+- Cada item: titulo, link para empresa, checkbox, badge overdue
+- Navegacao < prev | Month Year | next >
+- Hook `useCalendar`: fetch `company_next_steps` joined com `companies(id, name)`, filtrado por range do mes
+
+### Novos Hooks
+- `use-company-documents.ts` — CRUD + Storage upload/download/delete + auto-activity
+- `use-company-activities.ts` — CRUD, sorted by date DESC
+- `use-company-next-steps.ts` — CRUD + toggleComplete + auto-activity
+- `use-calendar.ts` — fetch month range across all companies, joined with company name
+
+### Dependencia
+- `date-fns` adicionada para calendar arithmetic (startOfMonth, endOfMonth, format, isBefore, etc.)
+
+### Build
+- `npm run build` passa com zero erros
+- `tsc --noEmit` sem erros
+- Rota `/calendar` aparece no build output
