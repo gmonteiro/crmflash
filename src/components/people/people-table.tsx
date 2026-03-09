@@ -1,6 +1,5 @@
 "use client"
 
-import { useState } from "react"
 import {
   useReactTable,
   getCoreRowModel,
@@ -12,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { getPeopleColumns } from "./people-table-columns"
 import type { Person } from "@/types/database"
 import { ChevronLeft, ChevronRight } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 interface PeopleTableProps {
   people: Person[]
@@ -21,6 +21,9 @@ interface PeopleTableProps {
   onPageChange: (page: number) => void
   onUpdate: (id: string, data: Partial<Person>) => void
   onDelete: (id: string) => void
+  sortBy?: string
+  sortDirection?: "asc" | "desc"
+  onSortChange: (column: string) => void
 }
 
 export function PeopleTable({
@@ -31,8 +34,12 @@ export function PeopleTable({
   onPageChange,
   onUpdate,
   onDelete,
+  sortBy,
+  sortDirection,
+  onSortChange,
 }: PeopleTableProps) {
-  const columns = getPeopleColumns({ onUpdate, onDelete })
+  const router = useRouter()
+  const columns = getPeopleColumns({ onUpdate, onDelete, sortBy, sortDirection, onSortChange })
 
   const table = useReactTable({
     data: people,
@@ -82,9 +89,25 @@ export function PeopleTable({
               </TableRow>
             ) : (
               table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id}>
+                <TableRow
+                  key={row.id}
+                  className="cursor-pointer"
+                  onClick={() => router.push(`/people/${row.original.id}`)}
+                >
                   {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
+                    <TableCell key={cell.id} onClick={(e) => {
+                      // Prevent row navigation for interactive cells (inline edit, actions, links)
+                      const target = e.target as HTMLElement
+                      if (
+                        target.closest("input") ||
+                        target.closest("button") ||
+                        target.closest("a") ||
+                        target.closest("[role='menu']") ||
+                        target.closest("[data-stop-propagation]")
+                      ) {
+                        e.stopPropagation()
+                      }
+                    }}>
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </TableCell>
                   ))}

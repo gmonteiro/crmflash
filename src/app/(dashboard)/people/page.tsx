@@ -13,11 +13,15 @@ export default function PeoplePage() {
   const [category, setCategory] = useState("all")
   const [page, setPage] = useState(0)
   const [formOpen, setFormOpen] = useState(false)
+  const [sortBy, setSortBy] = useState<string>("created_at")
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc")
 
   const { people, loading, pageCount, createPerson, updatePerson, deletePerson } = usePeople({
     search: search || undefined,
     category: category !== "all" ? category : undefined,
     page,
+    sortBy,
+    sortDesc: sortDirection === "desc",
   })
 
   const handleCreate = useCallback(async (data: PersonFormData) => {
@@ -40,6 +44,16 @@ export default function PeoplePage() {
     else toast.error("Failed to delete")
   }, [deletePerson])
 
+  const handleSortChange = useCallback((column: string) => {
+    if (column === sortBy) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"))
+    } else {
+      setSortBy(column)
+      setSortDirection("asc")
+    }
+    setPage(0)
+  }, [sortBy])
+
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">People</h1>
@@ -60,6 +74,9 @@ export default function PeoplePage() {
         onPageChange={setPage}
         onUpdate={handleUpdate}
         onDelete={handleDelete}
+        sortBy={sortBy}
+        sortDirection={sortDirection}
+        onSortChange={handleSortChange}
       />
 
       <PersonForm
