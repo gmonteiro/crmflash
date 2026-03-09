@@ -26,6 +26,7 @@ interface PeopleTableProps {
   sortDirection?: "asc" | "desc"
   onSortChange: (column: string) => void
   onSelectionChange?: (selectedIds: string[]) => void
+  shortlistsByPerson?: Record<string, { id: string; name: string }[]>
 }
 
 export function PeopleTable({
@@ -40,11 +41,12 @@ export function PeopleTable({
   sortDirection,
   onSortChange,
   onSelectionChange,
+  shortlistsByPerson,
 }: PeopleTableProps) {
   const router = useRouter()
   const sentinelRef = useRef<HTMLTableRowElement>(null)
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
-  const columns = getPeopleColumns({ onUpdate, onDelete, sortBy, sortDirection, onSortChange })
+  const columns = getPeopleColumns({ onUpdate, onDelete, sortBy, sortDirection, onSortChange, shortlistsByPerson })
 
   const table = useReactTable({
     data: people,

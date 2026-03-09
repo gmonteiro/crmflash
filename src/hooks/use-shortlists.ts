@@ -4,6 +4,38 @@ import { useState, useEffect, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
 import type { Shortlist, ShortlistMember, ShortlistEntityType } from "@/types/database"
 
+export function useShortlistMemberships(entityType: ShortlistEntityType) {
+  const [map, setMap] = useState<Record<string, { id: string; name: string }[]>>({})
+
+  const fetch = useCallback(async () => {
+    const supabase = createClient()
+    const idField = entityType === "person" ? "person_id" : "company_id"
+
+    const { data, error } = await supabase
+      .from("shortlist_members")
+      .select(`${idField}, shortlist:shortlists(id, name, entity_type)`)
+      .not(idField, "is", null)
+
+    if (!error && data) {
+      const result: Record<string, { id: string; name: string }[]> = {}
+      for (const row of data as Record<string, unknown>[]) {
+        const entityId = row[idField] as string
+        const sl = row.shortlist as { id: string; name: string; entity_type: string } | null
+        if (!entityId || !sl || sl.entity_type !== entityType) continue
+        if (!result[entityId]) result[entityId] = []
+        result[entityId].push({ id: sl.id, name: sl.name })
+      }
+      setMap(result)
+    }
+  }, [entityType])
+
+  useEffect(() => {
+    fetch()
+  }, [fetch])
+
+  return { shortlistsByEntity: map, refetch: fetch }
+}
+
 export function useShortlists(entityType: ShortlistEntityType) {
   const [shortlists, setShortlists] = useState<Shortlist[]>([])
   const [loading, setLoading] = useState(true)

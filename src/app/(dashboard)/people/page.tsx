@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react"
 import { usePeople } from "@/hooks/use-people"
+import { useShortlistMemberships } from "@/hooks/use-shortlists"
 import { PeopleTable } from "@/components/people/people-table"
 import { PeopleTableToolbar } from "@/components/people/people-table-toolbar"
 import { PersonForm } from "@/components/people/person-form"
@@ -19,6 +20,8 @@ export default function PeoplePage() {
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc")
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [shortlistDialogOpen, setShortlistDialogOpen] = useState(false)
+
+  const { shortlistsByEntity, refetch: refetchMemberships } = useShortlistMemberships("person")
 
   const { people, loading, loadingMore, hasMore, loadMore, createPerson, updatePerson, deletePerson } = usePeople({
     search: search || undefined,
@@ -89,6 +92,7 @@ export default function PeoplePage() {
             sortDirection={sortDirection}
             onSortChange={handleSortChange}
             onSelectionChange={setSelectedIds}
+            shortlistsByPerson={shortlistsByEntity}
           />
         </TabsContent>
 
@@ -108,7 +112,7 @@ export default function PeoplePage() {
         onClose={() => setShortlistDialogOpen(false)}
         entityType="person"
         selectedIds={selectedIds}
-        onDone={() => setSelectedIds([])}
+        onDone={() => { setSelectedIds([]); refetchMemberships() }}
       />
     </div>
   )

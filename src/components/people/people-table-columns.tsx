@@ -3,6 +3,7 @@
 import { ColumnDef } from "@tanstack/react-table"
 import { Person } from "@/types/database"
 import { InlineEditCell } from "./inline-edit-cell"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -16,6 +17,7 @@ interface ColumnOptions {
   sortBy?: string
   sortDirection?: "asc" | "desc"
   onSortChange: (column: string) => void
+  shortlistsByPerson?: Record<string, { id: string; name: string }[]>
 }
 
 function SortHeader({
@@ -46,7 +48,7 @@ function SortHeader({
   )
 }
 
-export function getPeopleColumns({ onUpdate, onDelete, sortBy, sortDirection, onSortChange }: ColumnOptions): ColumnDef<Person>[] {
+export function getPeopleColumns({ onUpdate, onDelete, sortBy, sortDirection, onSortChange, shortlistsByPerson }: ColumnOptions): ColumnDef<Person>[] {
   return [
     {
       id: "select",
@@ -159,11 +161,21 @@ export function getPeopleColumns({ onUpdate, onDelete, sortBy, sortDirection, on
       },
     },
     {
-      accessorKey: "email",
-      header: "Email",
-      cell: ({ row }) => (
-        <span className="text-sm text-muted-foreground">{row.original.email || "-"}</span>
-      ),
+      id: "shortlists",
+      header: "Shortlists",
+      cell: ({ row }) => {
+        const lists = shortlistsByPerson?.[row.original.id]
+        if (!lists || lists.length === 0) return null
+        return (
+          <div className="flex flex-wrap gap-1">
+            {lists.map((sl) => (
+              <Badge key={sl.id} variant="outline" className="text-xs">
+                {sl.name}
+              </Badge>
+            ))}
+          </div>
+        )
+      },
     },
     {
       id: "actions",
