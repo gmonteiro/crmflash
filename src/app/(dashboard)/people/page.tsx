@@ -11,15 +11,13 @@ import { toast } from "sonner"
 export default function PeoplePage() {
   const [search, setSearch] = useState("")
   const [category, setCategory] = useState("all")
-  const [page, setPage] = useState(0)
   const [formOpen, setFormOpen] = useState(false)
   const [sortBy, setSortBy] = useState<string>("created_at")
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc")
 
-  const { people, loading, pageCount, createPerson, updatePerson, deletePerson } = usePeople({
+  const { people, loading, loadingMore, hasMore, loadMore, createPerson, updatePerson, deletePerson } = usePeople({
     search: search || undefined,
     category: category !== "all" ? category : undefined,
-    page,
     sortBy,
     sortDesc: sortDirection === "desc",
   })
@@ -51,7 +49,6 @@ export default function PeoplePage() {
       setSortBy(column)
       setSortDirection("asc")
     }
-    setPage(0)
   }, [sortBy])
 
   return (
@@ -60,18 +57,18 @@ export default function PeoplePage() {
 
       <PeopleTableToolbar
         search={search}
-        onSearchChange={(v) => { setSearch(v); setPage(0) }}
+        onSearchChange={setSearch}
         category={category}
-        onCategoryChange={(v) => { setCategory(v); setPage(0) }}
+        onCategoryChange={setCategory}
         onAddPerson={() => setFormOpen(true)}
       />
 
       <PeopleTable
         people={people}
         loading={loading}
-        page={page}
-        pageCount={pageCount}
-        onPageChange={setPage}
+        loadingMore={loadingMore}
+        hasMore={hasMore}
+        onLoadMore={loadMore}
         onUpdate={handleUpdate}
         onDelete={handleDelete}
         sortBy={sortBy}

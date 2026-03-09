@@ -8,20 +8,25 @@ interface UsePeopleOptions {
   search?: string
   category?: string
   companyId?: string
-  page?: number
   pageSize?: number
   sortBy?: string
   sortDesc?: boolean
 }
 
 export function usePeople(options: UsePeopleOptions = {}) {
-  const { search, category, companyId, page = 0, pageSize = 25, sortBy = "created_at", sortDesc = true } = options
+  const { search, category, companyId, pageSize = 25, sortBy = "created_at", sortDesc = true } = options
   const [people, setPeople] = useState<Person[]>([])
   const [totalCount, setTotalCount] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [page, setPage] = useState(0)
 
-  const fetchPeople = useCallback(async () => {
-    setLoading(true)
+  const hasMore = people.length < totalCount
+
+  const fetchPage = useCallback(async (pageNum: number, append: boolean) => {
+    if (append) setLoadingMore(true)
+    else setLoading(true)
+
     const supabase = createClient()
 
     let query = supabase
@@ -40,20 +45,39 @@ export function usePeople(options: UsePeopleOptions = {}) {
 
     query = query
       .order(sortBy, { ascending: !sortDesc })
-      .range(page * pageSize, (page + 1) * pageSize - 1)
+      .range(pageNum * pageSize, (pageNum + 1) * pageSize - 1)
 
     const { data, count, error } = await query
 
     if (!error && data) {
-      setPeople(data as Person[])
+      if (append) {
+        setPeople((prev) => [...prev, ...(data as Person[])])
+      } else {
+        setPeople(data as Person[])
+      }
       setTotalCount(count ?? 0)
     }
     setLoading(false)
-  }, [search, category, companyId, page, pageSize, sortBy, sortDesc])
+    setLoadingMore(false)
+  }, [search, category, companyId, pageSize, sortBy, sortDesc])
 
+  // Reset and fetch first page when filters/sort change
   useEffect(() => {
-    fetchPeople()
-  }, [fetchPeople])
+    setPage(0)
+    fetchPage(0, false)
+  }, [fetchPage])
+
+  const loadMore = useCallback(() => {
+    if (loadingMore || !hasMore) return
+    const nextPage = page + 1
+    setPage(nextPage)
+    fetchPage(nextPage, true)
+  }, [page, loadingMore, hasMore, fetchPage])
+
+  const refetch = useCallback(() => {
+    setPage(0)
+    fetchPage(0, false)
+  }, [fetchPage])
 
   async function createPerson(data: Partial<Person>) {
     const supabase = createClient()
@@ -94,7 +118,7 @@ export function usePeople(options: UsePeopleOptions = {}) {
       .eq("user_id", user.id)
 
     if (error) {
-      fetchPeople() // Revert on error
+      refetch()
       return false
     }
     return true
@@ -115,7 +139,7 @@ export function usePeople(options: UsePeopleOptions = {}) {
       .eq("user_id", user.id)
 
     if (error) {
-      fetchPeople()
+      refetch()
       return false
     }
     return true
@@ -125,11 +149,13 @@ export function usePeople(options: UsePeopleOptions = {}) {
     people,
     totalCount,
     loading,
-    refetch: fetchPeople,
+    loadingMore,
+    hasMore,
+    loadMore,
+    refetch,
     createPerson,
     updatePerson,
     deletePerson,
-    pageCount: Math.ceil(totalCount / pageSize),
   }
 }
 

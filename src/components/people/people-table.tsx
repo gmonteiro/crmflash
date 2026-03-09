@@ -1,24 +1,24 @@
 "use client"
 
+import { useRef, useEffect, useCallback } from "react"
 import {
   useReactTable,
   getCoreRowModel,
   flexRender,
 } from "@tanstack/react-table"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { getPeopleColumns } from "./people-table-columns"
 import type { Person } from "@/types/database"
-import { ChevronLeft, ChevronRight } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { Loader2 } from "lucide-react"
 
 interface PeopleTableProps {
   people: Person[]
   loading: boolean
-  page: number
-  pageCount: number
-  onPageChange: (page: number) => void
+  loadingMore: boolean
+  hasMore: boolean
+  onLoadMore: () => void
   onUpdate: (id: string, data: Partial<Person>) => void
   onDelete: (id: string) => void
   sortBy?: string
@@ -29,9 +29,9 @@ interface PeopleTableProps {
 export function PeopleTable({
   people,
   loading,
-  page,
-  pageCount,
-  onPageChange,
+  loadingMore,
+  hasMore,
+  onLoadMore,
   onUpdate,
   onDelete,
   sortBy,
@@ -39,6 +39,7 @@ export function PeopleTable({
   onSortChange,
 }: PeopleTableProps) {
   const router = useRouter()
+  const sentinelRef = useRef<HTMLTableRowElement>(null)
   const columns = getPeopleColumns({ onUpdate, onDelete, sortBy, sortDirection, onSortChange })
 
   const table = useReactTable({
@@ -46,6 +47,27 @@ export function PeopleTable({
     columns,
     getCoreRowModel: getCoreRowModel(),
   })
+
+  // Intersection observer to trigger loadMore when sentinel is visible
+  const onLoadMoreRef = useRef(onLoadMore)
+  onLoadMoreRef.current = onLoadMore
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current
+    if (!sentinel) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          onLoadMoreRef.current()
+        }
+      },
+      { rootMargin: "200px" }
+    )
+
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [hasMore, people.length])
 
   if (loading) {
     return (
@@ -88,61 +110,45 @@ export function PeopleTable({
                 </TableCell>
               </TableRow>
             ) : (
-              table.getRowModel().rows.map((row) => (
-                <TableRow
-                  key={row.id}
-                  className="cursor-pointer"
-                  onClick={() => router.push(`/people/${row.original.id}`)}
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id} onClick={(e) => {
-                      // Prevent row navigation for interactive cells (inline edit, actions, links)
-                      const target = e.target as HTMLElement
-                      if (
-                        target.closest("input") ||
-                        target.closest("button") ||
-                        target.closest("a") ||
-                        target.closest("[role='menu']") ||
-                        target.closest("[data-stop-propagation]")
-                      ) {
-                        e.stopPropagation()
-                      }
-                    }}>
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+              <>
+                {table.getRowModel().rows.map((row) => (
+                  <TableRow
+                    key={row.id}
+                    className="cursor-pointer"
+                    onClick={() => router.push(`/people/${row.original.id}`)}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell key={cell.id} onClick={(e) => {
+                        const target = e.target as HTMLElement
+                        if (
+                          target.closest("input") ||
+                          target.closest("button") ||
+                          target.closest("a") ||
+                          target.closest("[role='menu']") ||
+                          target.closest("[data-stop-propagation]")
+                        ) {
+                          e.stopPropagation()
+                        }
+                      }}>
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))}
+                {hasMore && (
+                  <TableRow ref={sentinelRef}>
+                    <TableCell colSpan={columns.length} className="h-12 text-center">
+                      {loadingMore && (
+                        <Loader2 className="h-4 w-4 animate-spin inline-block text-muted-foreground" />
+                      )}
                     </TableCell>
-                  ))}
-                </TableRow>
-              ))
+                  </TableRow>
+                )}
+              </>
             )}
           </TableBody>
         </Table>
       </div>
-
-      {pageCount > 1 && (
-        <div className="flex items-center justify-between mt-4">
-          <p className="text-sm text-muted-foreground">
-            Page {page + 1} of {pageCount}
-          </p>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onPageChange(page - 1)}
-              disabled={page === 0}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onPageChange(page + 1)}
-              disabled={page >= pageCount - 1}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
