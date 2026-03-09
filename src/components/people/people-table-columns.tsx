@@ -3,11 +3,10 @@
 import { ColumnDef } from "@tanstack/react-table"
 import { Person } from "@/types/database"
 import { InlineEditCell } from "./inline-edit-cell"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { MoreHorizontal, ExternalLink, Trash2, Eye, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
+import { MoreHorizontal, ExternalLink, Trash2, Eye, ArrowUpDown, ArrowUp, ArrowDown, Linkedin } from "lucide-react"
 import Link from "next/link"
 import { safeHref } from "@/lib/utils"
 
@@ -141,13 +140,22 @@ export function getPeopleColumns({ onUpdate, onDelete, sortBy, sortDirection, on
       },
     },
     {
-      accessorKey: "category",
-      header: () => (
-        <SortHeader label="Category" column="category" sortBy={sortBy} sortDirection={sortDirection} onSortChange={onSortChange} />
-      ),
+      id: "linkedin",
+      header: "LinkedIn",
       cell: ({ row }) => {
-        const cat = row.original.category
-        return cat ? <Badge variant="secondary">{cat}</Badge> : null
+        const url = safeHref(row.original.linkedin_url)
+        if (!url) return <span className="text-sm text-muted-foreground">-</span>
+        return (
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center text-muted-foreground hover:text-primary"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Linkedin className="h-4 w-4" />
+          </a>
+        )
       },
     },
     {
