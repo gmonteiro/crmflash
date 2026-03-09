@@ -3,7 +3,7 @@
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Search, Plus, Linkedin } from "lucide-react"
+import { Search, Plus, Linkedin, ListPlus } from "lucide-react"
 
 interface PeopleTableToolbarProps {
   search: string
@@ -13,6 +13,7 @@ interface PeopleTableToolbarProps {
   onAddPerson: () => void
   selectedCount?: number
   onBulkEnrich?: () => void
+  onAddToShortlist?: () => void
 }
 
 export function PeopleTableToolbar({
@@ -23,6 +24,7 @@ export function PeopleTableToolbar({
   onAddPerson,
   selectedCount = 0,
   onBulkEnrich,
+  onAddToShortlist,
 }: PeopleTableToolbarProps) {
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -51,6 +53,12 @@ export function PeopleTableToolbar({
         </Select>
       </div>
       <div className="flex items-center gap-2">
+        {selectedCount > 0 && onAddToShortlist && (
+          <Button variant="outline" size="sm" onClick={onAddToShortlist}>
+            <ListPlus className="mr-2 h-4 w-4" />
+            Add to Shortlist ({selectedCount})
+          </Button>
+        )}
         {selectedCount > 0 && onBulkEnrich && (
           <Button variant="outline" size="sm" onClick={onBulkEnrich}>
             <Linkedin className="mr-2 h-4 w-4" />

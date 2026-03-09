@@ -6,6 +6,9 @@ import { useBulkEnrich } from "@/hooks/use-enrich"
 import { createClient } from "@/lib/supabase/client"
 import { CompanyTable } from "@/components/companies/company-table"
 import { CompanyForm } from "@/components/companies/company-form"
+import { AddToShortlistDialog } from "@/components/shared/add-to-shortlist-dialog"
+import { ShortlistsTab } from "@/components/shared/shortlists-tab"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
@@ -13,7 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { INDUSTRIES } from "@/lib/constants"
 import { ReasoningPanel } from "@/components/shared/reasoning-panel"
-import { Search, Plus, Sparkles } from "lucide-react"
+import { Search, Plus, Sparkles, ListPlus } from "lucide-react"
 import { toast } from "sonner"
 import type { CompanyFormData } from "@/lib/validators"
 import type { Company } from "@/types/database"
@@ -36,6 +39,8 @@ export default function CompaniesPage() {
   const [enrichOpen, setEnrichOpen] = useState(false)
   const [sortBy, setSortBy] = useState<string>("created_at")
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc")
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [shortlistDialogOpen, setShortlistDialogOpen] = useState(false)
 
   const { companies, loading, pageCount, refetch, createCompany, deleteCompany } = useCompanies({
     search: search || undefined,
@@ -103,59 +108,87 @@ export default function CompaniesPage() {
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Companies</h1>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-1 items-center gap-2">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search companies..."
-              value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(0) }}
-              className="pl-8"
-            />
-          </div>
-          <Select value={industry} onValueChange={(v) => { setIndustry(v); setPage(0) }}>
-            <SelectTrigger className="w-[160px]">
-              <SelectValue placeholder="Industry" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Industries</SelectItem>
-              {INDUSTRIES.map((ind) => (
-                <SelectItem key={ind} value={ind}>
-                  {ind}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={handleEnrichAll} disabled={bulk.running}>
-            <Sparkles className="mr-2 h-4 w-4" />
-            Enrich All
-          </Button>
-          <Button onClick={() => setFormOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Company
-          </Button>
-        </div>
-      </div>
+      <Tabs defaultValue="all">
+        <TabsList>
+          <TabsTrigger value="all">All Companies</TabsTrigger>
+          <TabsTrigger value="shortlists">Shortlists</TabsTrigger>
+        </TabsList>
 
-      <CompanyTable
-        companies={companies}
-        loading={loading}
-        page={page}
-        pageCount={pageCount}
-        onPageChange={setPage}
-        onDelete={handleDelete}
-        sortBy={sortBy}
-        sortDirection={sortDirection}
-        onSortChange={handleSortChange}
-      />
+        <TabsContent value="all" className="space-y-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-1 items-center gap-2">
+              <div className="relative flex-1 max-w-sm">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search companies..."
+                  value={search}
+                  onChange={(e) => { setSearch(e.target.value); setPage(0) }}
+                  className="pl-8"
+                />
+              </div>
+              <Select value={industry} onValueChange={(v) => { setIndustry(v); setPage(0) }}>
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue placeholder="Industry" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Industries</SelectItem>
+                  {INDUSTRIES.map((ind) => (
+                    <SelectItem key={ind} value={ind}>
+                      {ind}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-2">
+              {selectedIds.length > 0 && (
+                <Button variant="outline" size="sm" onClick={() => setShortlistDialogOpen(true)}>
+                  <ListPlus className="mr-2 h-4 w-4" />
+                  Add to Shortlist ({selectedIds.length})
+                </Button>
+              )}
+              <Button variant="outline" onClick={handleEnrichAll} disabled={bulk.running}>
+                <Sparkles className="mr-2 h-4 w-4" />
+                Enrich All
+              </Button>
+              <Button onClick={() => setFormOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Company
+              </Button>
+            </div>
+          </div>
+
+          <CompanyTable
+            companies={companies}
+            loading={loading}
+            page={page}
+            pageCount={pageCount}
+            onPageChange={setPage}
+            onDelete={handleDelete}
+            sortBy={sortBy}
+            sortDirection={sortDirection}
+            onSortChange={handleSortChange}
+            onSelectionChange={setSelectedIds}
+          />
+        </TabsContent>
+
+        <TabsContent value="shortlists">
+          <ShortlistsTab entityType="company" />
+        </TabsContent>
+      </Tabs>
 
       <CompanyForm
         open={formOpen}
         onClose={() => setFormOpen(false)}
         onSubmit={handleCreate}
+      />
+
+      <AddToShortlistDialog
+        open={shortlistDialogOpen}
+        onClose={() => setShortlistDialogOpen(false)}
+        entityType="company"
+        selectedIds={selectedIds}
+        onDone={() => setSelectedIds([])}
       />
 
       <Dialog open={enrichOpen} onOpenChange={(open) => { if (!open && !bulk.running) handleEnrichClose() }}>

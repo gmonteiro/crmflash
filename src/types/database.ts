@@ -150,6 +150,30 @@ export interface Activity {
   company?: { id: string; name: string } | null
 }
 
+export type ShortlistEntityType = 'person' | 'company'
+
+export interface Shortlist {
+  id: string
+  user_id: string
+  entity_type: ShortlistEntityType
+  name: string
+  description: string | null
+  created_at: string
+  updated_at: string
+  member_count?: number
+}
+
+export interface ShortlistMember {
+  id: string
+  shortlist_id: string
+  person_id: string | null
+  company_id: string | null
+  added_at: string
+  // Joined
+  person?: Person | null
+  company?: Company | null
+}
+
 export interface CompanyNextStep {
   id: string
   user_id: string

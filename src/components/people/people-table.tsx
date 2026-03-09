@@ -1,10 +1,11 @@
 "use client"
 
-import { useRef, useEffect, useCallback } from "react"
+import { useRef, useEffect, useCallback, useState } from "react"
 import {
   useReactTable,
   getCoreRowModel,
   flexRender,
+  RowSelectionState,
 } from "@tanstack/react-table"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -24,6 +25,7 @@ interface PeopleTableProps {
   sortBy?: string
   sortDirection?: "asc" | "desc"
   onSortChange: (column: string) => void
+  onSelectionChange?: (selectedIds: string[]) => void
 }
 
 export function PeopleTable({
@@ -37,16 +39,29 @@ export function PeopleTable({
   sortBy,
   sortDirection,
   onSortChange,
+  onSelectionChange,
 }: PeopleTableProps) {
   const router = useRouter()
   const sentinelRef = useRef<HTMLTableRowElement>(null)
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
   const columns = getPeopleColumns({ onUpdate, onDelete, sortBy, sortDirection, onSortChange })
 
   const table = useReactTable({
     data: people,
     columns,
     getCoreRowModel: getCoreRowModel(),
+    getRowId: (row) => row.id,
+    onRowSelectionChange: setRowSelection,
+    state: { rowSelection },
   })
+
+  // Notify parent of selection changes
+  useEffect(() => {
+    if (onSelectionChange) {
+      const selectedIds = Object.keys(rowSelection).filter((k) => rowSelection[k])
+      onSelectionChange(selectedIds)
+    }
+  }, [rowSelection, onSelectionChange])
 
   // Intersection observer to trigger loadMore when sentinel is visible
   const onLoadMoreRef = useRef(onLoadMore)

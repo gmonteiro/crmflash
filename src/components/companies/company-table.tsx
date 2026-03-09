@@ -1,15 +1,18 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import {
   useReactTable,
   getCoreRowModel,
   flexRender,
   ColumnDef,
+  RowSelectionState,
 } from "@tanstack/react-table"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Checkbox } from "@/components/ui/checkbox"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { MoreHorizontal, Eye, Trash2, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
 import type { Company } from "@/types/database"
@@ -26,6 +29,7 @@ interface CompanyTableProps {
   sortBy?: string
   sortDirection?: "asc" | "desc"
   onSortChange: (column: string) => void
+  onSelectionChange?: (selectedIds: string[]) => void
 }
 
 function SortHeader({
@@ -66,8 +70,38 @@ export function CompanyTable({
   sortBy,
   sortDirection,
   onSortChange,
+  onSelectionChange,
 }: CompanyTableProps) {
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
+
+  useEffect(() => {
+    if (onSelectionChange) {
+      const selectedIds = Object.keys(rowSelection).filter((k) => rowSelection[k])
+      onSelectionChange(selectedIds)
+    }
+  }, [rowSelection, onSelectionChange])
+
   const columns: ColumnDef<Company>[] = [
+    {
+      id: "select",
+      header: ({ table }) => (
+        <Checkbox
+          checked={table.getIsAllPageRowsSelected()}
+          onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+          aria-label="Select all"
+        />
+      ),
+      cell: ({ row }) => (
+        <Checkbox
+          checked={row.getIsSelected()}
+          onCheckedChange={(value) => row.toggleSelected(!!value)}
+          aria-label="Select row"
+          onClick={(e) => e.stopPropagation()}
+        />
+      ),
+      enableSorting: false,
+      enableHiding: false,
+    },
     {
       accessorKey: "name",
       header: () => (
@@ -161,6 +195,9 @@ export function CompanyTable({
     data: companies,
     columns,
     getCoreRowModel: getCoreRowModel(),
+    getRowId: (row) => row.id,
+    onRowSelectionChange: setRowSelection,
+    state: { rowSelection },
   })
 
   if (loading) {

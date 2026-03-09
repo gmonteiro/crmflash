@@ -5,6 +5,7 @@ import { Person } from "@/types/database"
 import { InlineEditCell } from "./inline-edit-cell"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { MoreHorizontal, ExternalLink, Trash2, Eye, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
 import Link from "next/link"
@@ -48,6 +49,29 @@ function SortHeader({
 
 export function getPeopleColumns({ onUpdate, onDelete, sortBy, sortDirection, onSortChange }: ColumnOptions): ColumnDef<Person>[] {
   return [
+    {
+      id: "select",
+      header: ({ table }) => (
+        <div data-stop-propagation>
+          <Checkbox
+            checked={table.getIsAllPageRowsSelected()}
+            onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+            aria-label="Select all"
+          />
+        </div>
+      ),
+      cell: ({ row }) => (
+        <div data-stop-propagation>
+          <Checkbox
+            checked={row.getIsSelected()}
+            onCheckedChange={(value) => row.toggleSelected(!!value)}
+            aria-label="Select row"
+          />
+        </div>
+      ),
+      enableSorting: false,
+      enableHiding: false,
+    },
     {
       accessorKey: "full_name",
       header: () => (
