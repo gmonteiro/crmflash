@@ -128,16 +128,19 @@ export function useShortlists(entityType: ShortlistEntityType) {
     const supabase = createClient()
     const idField = entityType === "person" ? "person_id" : "company_id"
 
-    const rows = entityIds.map((eid) => ({
-      shortlist_id: shortlistId,
-      [idField]: eid,
-    }))
+    let hasError = false
+    for (const eid of entityIds) {
+      const { error } = await supabase
+        .from("shortlist_members")
+        .insert({ shortlist_id: shortlistId, [idField]: eid })
 
-    const { error } = await supabase
-      .from("shortlist_members")
-      .upsert(rows, { onConflict: `shortlist_id,${idField}`, ignoreDuplicates: true })
+      // Ignore unique constraint violations (already a member)
+      if (error && !error.message.includes("duplicate") && !error.code?.startsWith("23")) {
+        hasError = true
+      }
+    }
 
-    if (!error) {
+    if (!hasError) {
       // Update count optimistically
       setShortlists((prev) =>
         prev.map((s) =>
@@ -149,7 +152,7 @@ export function useShortlists(entityType: ShortlistEntityType) {
       // Refetch for accurate count
       fetchShortlists()
     }
-    return !error
+    return !hasError
   }, [entityType, fetchShortlists])
 
   const removeMember = useCallback(async (memberId: string, shortlistId: string) => {
