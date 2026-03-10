@@ -45,13 +45,18 @@ export function usePeople(options: UsePeopleOptions = {}) {
 
     query = query
       .order(sortBy, { ascending: !sortDesc })
+      .order("id", { ascending: true })
       .range(pageNum * pageSize, (pageNum + 1) * pageSize - 1)
 
     const { data, count, error } = await query
 
     if (!error && data) {
       if (append) {
-        setPeople((prev) => [...prev, ...(data as Person[])])
+        setPeople((prev) => {
+          const existingIds = new Set(prev.map((p) => p.id))
+          const newItems = (data as Person[]).filter((p) => !existingIds.has(p.id))
+          return [...prev, ...newItems]
+        })
       } else {
         setPeople(data as Person[])
       }
