@@ -18,14 +18,12 @@ export function usePeople(options: UsePeopleOptions = {}) {
   const [people, setPeople] = useState<Person[]>([])
   const [totalCount, setTotalCount] = useState(0)
   const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
   const [page, setPage] = useState(0)
 
-  const hasMore = people.length < totalCount
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
 
-  const fetchPage = useCallback(async (pageNum: number, append: boolean) => {
-    if (append) setLoadingMore(true)
-    else setLoading(true)
+  const fetchPage = useCallback(async (pageNum: number) => {
+    setLoading(true)
 
     const supabase = createClient()
 
@@ -51,38 +49,27 @@ export function usePeople(options: UsePeopleOptions = {}) {
     const { data, count, error } = await query
 
     if (!error && data) {
-      if (append) {
-        setPeople((prev) => {
-          const existingIds = new Set(prev.map((p) => p.id))
-          const newItems = (data as Person[]).filter((p) => !existingIds.has(p.id))
-          return [...prev, ...newItems]
-        })
-      } else {
-        setPeople(data as Person[])
-      }
+      setPeople(data as Person[])
       setTotalCount(count ?? 0)
     }
     setLoading(false)
-    setLoadingMore(false)
   }, [search, category, companyId, pageSize, sortBy, sortDesc])
 
   // Reset and fetch first page when filters/sort change
   useEffect(() => {
     setPage(0)
-    fetchPage(0, false)
+    fetchPage(0)
   }, [fetchPage])
 
-  const loadMore = useCallback(() => {
-    if (loadingMore || !hasMore) return
-    const nextPage = page + 1
-    setPage(nextPage)
-    fetchPage(nextPage, true)
-  }, [page, loadingMore, hasMore, fetchPage])
+  const goToPage = useCallback((p: number) => {
+    const clamped = Math.max(0, Math.min(p, totalPages - 1))
+    setPage(clamped)
+    fetchPage(clamped)
+  }, [totalPages, fetchPage])
 
   const refetch = useCallback(() => {
-    setPage(0)
-    fetchPage(0, false)
-  }, [fetchPage])
+    fetchPage(page)
+  }, [fetchPage, page])
 
   async function createPerson(data: Partial<Person>) {
     const supabase = createClient()
@@ -154,9 +141,9 @@ export function usePeople(options: UsePeopleOptions = {}) {
     people,
     totalCount,
     loading,
-    loadingMore,
-    hasMore,
-    loadMore,
+    page,
+    totalPages,
+    goToPage,
     refetch,
     createPerson,
     updatePerson,

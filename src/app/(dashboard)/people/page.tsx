@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useRef, useEffect } from "react"
 import { usePeople } from "@/hooks/use-people"
-import { useShortlistMemberships } from "@/hooks/use-shortlists"
+import { useShortlists, useShortlistMemberships } from "@/hooks/use-shortlists"
 import { PeopleTable } from "@/components/people/people-table"
 import { PeopleTableToolbar } from "@/components/people/people-table-toolbar"
 import { PersonForm } from "@/components/people/person-form"
@@ -22,13 +22,33 @@ export default function PeoplePage() {
   const [shortlistDialogOpen, setShortlistDialogOpen] = useState(false)
 
   const { shortlistsByEntity, refetch: refetchMemberships } = useShortlistMemberships("person")
+  const { shortlists, addMembers } = useShortlists("person")
 
-  const { people, loading, loadingMore, hasMore, loadMore, createPerson, updatePerson, deletePerson } = usePeople({
+  const { people, totalCount, loading, page, totalPages, goToPage, createPerson, updatePerson, deletePerson } = usePeople({
     search: search || undefined,
     category: category !== "all" ? category : undefined,
     sortBy,
     sortDesc: sortDirection === "desc",
   })
+
+  // Auto-add to first shortlist when selecting checkboxes
+  const prevSelectedRef = useRef<string[]>([])
+
+  useEffect(() => {
+    const prev = new Set(prevSelectedRef.current)
+    const newlySelected = selectedIds.filter((id) => !prev.has(id))
+    prevSelectedRef.current = selectedIds
+
+    if (newlySelected.length === 0 || shortlists.length === 0) return
+
+    const firstShortlist = shortlists[shortlists.length - 1] // oldest = first created
+    addMembers(firstShortlist.id, newlySelected).then((ok) => {
+      if (ok) {
+        toast.success(`Added to "${firstShortlist.name}"`)
+        refetchMemberships()
+      }
+    })
+  }, [selectedIds, shortlists, addMembers, refetchMemberships])
 
   const handleCreate = useCallback(async (data: PersonFormData) => {
     const person = await createPerson(data)
@@ -83,9 +103,10 @@ export default function PeoplePage() {
           <PeopleTable
             people={people}
             loading={loading}
-            loadingMore={loadingMore}
-            hasMore={hasMore}
-            onLoadMore={loadMore}
+            page={page}
+            totalPages={totalPages}
+            totalCount={totalCount}
+            onPageChange={goToPage}
             onUpdate={handleUpdate}
             onDelete={handleDelete}
             sortBy={sortBy}
