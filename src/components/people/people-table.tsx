@@ -157,8 +157,20 @@ export function PeopleTable({
             <ChevronLeft className="h-4 w-4" />
             Previous
           </Button>
-          <span className="text-sm text-muted-foreground">
-            Page {page + 1} of {totalPages}
+          <span className="text-sm text-muted-foreground flex items-center gap-1">
+            Page
+            <input
+              type="number"
+              min={1}
+              max={totalPages}
+              value={page + 1}
+              onChange={(e) => {
+                const val = parseInt(e.target.value, 10)
+                if (!isNaN(val)) onPageChange(val - 1)
+              }}
+              className="w-12 rounded border bg-transparent px-1 py-0.5 text-center text-sm [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            />
+            of {totalPages}
           </span>
           <Button
             variant="outline"
