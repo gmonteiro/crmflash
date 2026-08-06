@@ -18,8 +18,47 @@ export interface Company {
   metadata: Record<string, unknown> | null
   kanban_column_id: string | null
   kanban_position: number | null
+  // Pipeline (migration 008)
+  champion_name: string | null
+  economic_buyer_name: string | null
+  pain_hypothesis: string | null
+  last_client_event_at: string | null
   created_at: string
   updated_at: string
+}
+
+export type CommitmentSignalType =
+  | 'second_interlocutor'
+  | 'presented_internally'
+  | 'shared_real_data'
+  | 'allocated_team_member'
+  | 'asked_price'
+  | 'security_process'
+
+export interface CommitmentSignal {
+  id: string
+  user_id: string
+  company_id: string
+  signal_type: CommitmentSignalType
+  captured_at: string
+  created_at: string
+}
+
+export type StageEventDirection = 'enter' | 'advance' | 'retreat' | 'frozen'
+
+export interface CompanyStageEvent {
+  id: string
+  user_id: string
+  company_id: string
+  from_column_id: string | null
+  to_column_id: string | null
+  from_title: string | null
+  to_title: string | null
+  from_position: number | null
+  to_position: number | null
+  direction: StageEventDirection
+  occurred_at: string
+  created_at: string
 }
 
 export interface Person {

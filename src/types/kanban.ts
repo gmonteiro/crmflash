@@ -1,7 +1,13 @@
 import type { KanbanColumn, Company } from './database'
 
+// Company com campos derivados agregados no fetch do board (não persistidos).
+export interface KanbanCardCompany extends Company {
+  signalCount?: number
+  nextStepDue?: string | null
+}
+
 export interface KanbanColumnWithCards extends KanbanColumn {
-  cards: Company[]
+  cards: KanbanCardCompany[]
 }
 
 export interface KanbanBoardData {

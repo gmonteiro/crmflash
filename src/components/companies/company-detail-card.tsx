@@ -9,6 +9,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import type { Company, Person } from "@/types/database"
 import { CompanyDetailHeader } from "./company-detail-header"
 import { CompanyOverviewTab } from "./company-overview-tab"
+import { CompanyPipelineTab } from "./company-pipeline-tab"
 import { CompanyTimelineTab } from "./company-timeline-tab"
 import { CompanyDocumentsTab } from "./company-documents-tab"
 import { CompanyNextStepsTab } from "./company-next-steps-tab"
@@ -57,6 +58,7 @@ export function CompanyDetailCard({ companyId }: CompanyDetailCardProps) {
           <Tabs defaultValue="overview">
             <TabsList variant="line">
               <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
               <TabsTrigger value="timeline">Timeline</TabsTrigger>
               <TabsTrigger value="documents">Documents</TabsTrigger>
               <TabsTrigger value="next-steps">Next Steps</TabsTrigger>
@@ -64,6 +66,9 @@ export function CompanyDetailCard({ companyId }: CompanyDetailCardProps) {
             </TabsList>
             <TabsContent value="overview" className="mt-4">
               <CompanyOverviewTab company={company} people={people} />
+            </TabsContent>
+            <TabsContent value="pipeline" className="mt-4">
+              <CompanyPipelineTab companyId={companyId} />
             </TabsContent>
             <TabsContent value="timeline" className="mt-4">
               <CompanyTimelineTab companyId={companyId} />
