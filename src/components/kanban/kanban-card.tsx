@@ -61,7 +61,7 @@ export function KanbanCard({ company, overlay, onRemove }: KanbanCardProps) {
       ref={!overlay ? setNodeRef : undefined}
       style={!overlay ? style : undefined}
       className={cn(
-        "group rounded-md border border-l-2 bg-card p-2 shadow-sm",
+        "group overflow-hidden rounded-md border border-l-2 bg-card p-2 shadow-sm",
         isFrozen && "border-l-red-500",
         isStale && "border-l-amber-500",
         !isFrozen && !isStale && "border-l-emerald-500",
@@ -80,27 +80,43 @@ export function KanbanCard({ company, overlay, onRemove }: KanbanCardProps) {
         <div className="min-w-0 flex-1">
           <Link
             href={`/companies/${company.id}`}
-            className="text-sm font-medium leading-tight hover:underline truncate block"
+            className="block truncate text-sm font-medium leading-tight hover:underline"
+            title={company.name}
           >
             {company.name}
           </Link>
 
           {company.champion_name && (
-            <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground truncate">
+            <div className="mt-1 flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
               <User className="h-3 w-3 shrink-0" />
-              <span className="truncate">{company.champion_name}</span>
+              <span className="truncate" title={company.champion_name}>
+                {company.champion_name}
+              </span>
             </div>
           )}
 
-          <div className="mt-1 flex flex-wrap items-center gap-1">
+          {/* O Badge do shadcn nasce com shrink-0 + whitespace-nowrap: um setor de
+              nome comprido se recusa a encolher, estoura a largura da coluna e o
+              ScrollArea (que só tem barra vertical) corta o resto. max-w-full o
+              prende na coluna e o span trunca com reticências; o title mostra o
+              valor inteiro no hover. */}
+          <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1">
             {company.industry && (
-              <Badge variant="outline" className="text-[10px] h-4 px-1">
-                {company.industry}
+              <Badge
+                variant="outline"
+                className="h-4 min-w-0 max-w-full px-1 text-[10px]"
+                title={company.industry}
+              >
+                <span className="truncate">{company.industry}</span>
               </Badge>
             )}
             {company.size_tier && (
-              <Badge variant="secondary" className="text-[10px] h-4 px-1">
-                {company.size_tier}
+              <Badge
+                variant="secondary"
+                className="h-4 min-w-0 max-w-full px-1 text-[10px]"
+                title={company.size_tier}
+              >
+                <span className="truncate">{company.size_tier}</span>
               </Badge>
             )}
           </div>
