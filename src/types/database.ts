@@ -227,3 +227,21 @@ export interface CompanyNextStep {
   // Joined (for calendar)
   company?: { id: string; name: string } | null
 }
+
+// Copiloto (migration 009). As perguntas são derivadas do estado do board; o que
+// persiste é a resposta, que também serve de supressão até suppress_until.
+export type CopilotEventStatus = 'answered' | 'snoozed' | 'dismissed'
+
+export interface CopilotQuestionEvent {
+  id: string
+  user_id: string
+  company_id: string
+  question_key: string
+  rule_id: string
+  status: CopilotEventStatus
+  action_id: string | null
+  answer_text: string | null
+  applied: Record<string, unknown> | null
+  suppress_until: string
+  created_at: string
+}

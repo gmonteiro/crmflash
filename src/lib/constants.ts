@@ -66,6 +66,42 @@ export const STAGE_EXIT_CRITERIA: Record<string, string> = {
 export const STALE_DAYS = 14
 export const FROZEN_DAYS = 30
 
+// ---------------------------------------------------------------------------
+// Copiloto comercial
+// ---------------------------------------------------------------------------
+
+// Quantas perguntas mostrar por dia, e no máximo quantas da mesma empresa —
+// sem isso uma conta bagunçada monopoliza a fila inteira.
+export const COPILOT_DAILY_LIMIT = 10
+export const COPILOT_MAX_PER_COMPANY = 2
+
+// Dias no mesmo estágio antes de o copiloto cobrar o critério de saída.
+export const STAGE_DWELL_DAYS = 10
+
+// Estágio a partir do qual já deveria existir algum sinal de compromisso
+// (posição da coluna no board, 1-indexed: 4 = "Dor validada" no padrão).
+export const SIGNAL_EXPECTED_FROM_POSITION = 4
+
+// Estágio a partir do qual o champion já deveria estar mapeado.
+export const CHAMPION_EXPECTED_FROM_POSITION = 3
+
+// Sinais mais plausíveis de terem acontecido em cada estágio. Usado para sugerir
+// as respostas rápidas da pergunta "nenhum sinal registrado ainda".
+// Chave = título da coluna (mesma convenção de STAGE_EXIT_CRITERIA).
+export const SIGNALS_BY_STAGE: Record<string, string[]> = {
+  'Dor validada': ['shared_real_data', 'second_interlocutor', 'presented_internally'],
+  'Solução desenhada': ['presented_internally', 'asked_price', 'second_interlocutor'],
+  'Prova': ['allocated_team_member', 'shared_real_data', 'asked_price'],
+  'Aprovação': ['asked_price', 'security_process', 'presented_internally'],
+}
+
+export const COPILOT_DRAFT_KINDS = [
+  { value: 'cobranca', label: 'Cobrar retorno' },
+  { value: 'retomada', label: 'Retomar conversa parada' },
+  { value: 'follow_up', label: 'Follow-up de próximo passo' },
+  { value: 'pos_reuniao', label: 'Recapitular reunião' },
+] as const
+
 export const KANBAN_COLORS = [
   '#6366f1',
   '#3b82f6',

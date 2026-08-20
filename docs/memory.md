@@ -311,3 +311,118 @@ Log corrido de todas as decisoes, ajustes, bugs e mudancas de rumo.
 - `npm run build` passa com zero erros
 - `tsc --noEmit` sem erros
 - Rota `/calendar` aparece no build output
+
+---
+
+## 2026-08-19 — Copiloto Comercial (Fase 1)
+
+O CRM era passivo: so registrava o que era digitado nele. O kanban tinha estagios
+com criterio de saida, sinais de compromisso e `last_client_event_at`, mas tudo
+so atualizava se o usuario lembrasse de clicar. Na pratica o board envelhecia e
+`/pipeline` mostrava metricas de um estado desatualizado.
+
+A Fase 1 inverte a direcao: o app pergunta, o usuario responde em segundos, o CRM
+se atualiza.
+
+### Extracao de `src/lib/pipeline/`
+- **Motivo:** ~80% da deteccao que o copiloto precisa ja existia dentro de
+  `use-pipeline-metrics.ts` (cards parados, gelados, gargalo, funil). Duplicar
+  isso no copiloto faria as duas telas divergirem em semanas.
+- **Solucao:** modulos puros — `types.ts` (PipelineSnapshot), `stages.ts`
+  (TERMINAL_STAGES, OUTCOME_STAGES, nextStage/prevStage, daysInCurrentStage),
+  `snapshot.ts` (fetchPipelineSnapshot), `metrics.ts` (computePipelineMetrics),
+  `move.ts` (applyStageMove + inferDirection).
+- `use-pipeline-metrics.ts` caiu de 249 para 27 linhas; `use-kanban.moveCard`
+  delega as escritas para `applyStageMove`.
+- **Fix de passagem 1:** a query de `company_stage_events` nao tinha `.limit()`.
+  O Supabase corta em 1000 linhas silenciosamente — as metricas passariam a
+  mentir sem aviso quando o log crescesse. Todas as queries do snapshot agora
+  tem `.limit(5000)`.
+- **Fix de passagem 2:** o update de `companies` em `moveCard` estava sem
+  `.eq("user_id", user.id)`, ao contrario de todas as outras escritas do repo.
+
+### Perguntas sao COMPUTADAS, nao persistidas
+- **Motivo:** uma pergunta depende de estado mutavel ("14 dias sem evento",
+  "proximo passo vencido"). Linha persistida ficaria obsoleta no instante em que
+  o card se move, e gera-la exigiria um scheduler que nao existe no projeto.
+- **Solucao:** `detectQuestions(snapshot, suppressedKeys)` roda no cliente a cada
+  load. O que persiste e a RESPOSTA, em `copilot_question_events` (migration 009).
+- **Impacto:** supressao, snooze, dismiss e dedup do mesmo dia colapsam num
+  mecanismo unico — a pergunta some enquanto existir linha com
+  `suppress_until >= hoje`. Dismiss = hoje + 365.
+
+### Invariante central
+`last_client_event_at` so sobe quando o CLIENTE fez algo. Acao do vendedor
+(cobrar, concluir tarefa, mandar proposta, reuniao que nao aconteceu) nunca
+bumpa. Isso vale para as quick actions, para os efeitos e e a regra numero 1 do
+prompt de interpretacao.
+
+### 9 regras (`src/lib/pipeline/rules.ts`)
+`meeting_yesterday` (100), `next_step_overdue` (95), `no_next_step` (90),
+`frozen_candidate` (85), `stalled_card` (80), `no_signal_past_stage` (70),
+`exit_criteria_unmet` (60), `missing_champion` (50), `missing_pain_hypothesis` (40).
+Ordenadas por prioridade → severidade, no maximo 2 por empresa e 10 no total —
+sem esse teto uma conta bagunçada monopoliza a fila inteira.
+
+### Texto livre → proposta
+- **Motivo:** botao resolve o caso comum, mas perde a nuance do que o cliente
+  realmente disse.
+- **Solucao:** `/api/copilot/interpret` monta o contexto da conta NO SERVIDOR
+  (nunca aceito do cliente, senao daria para forjar o estagio), chama Claude
+  Haiku com `temperature: 0` e sem tools, valida com zod.
+- **Nunca auto-aplica.** `company_stage_events` e append-only (sem policy de
+  UPDATE): um estagio alucinado deixaria evento errado permanente nas metricas.
+  O usuario confirma item a item em `copilot-proposal-review.tsx`.
+- Clamps de sanidade no servidor: descarta `stage_target_title` fora das colunas
+  reais, descarta sinais ja capturados, e forca `stage_move: "none"` quando
+  `confidence === "low"`.
+- `COPILOT_PROVIDER` default `anthropic` — nao `openai` como no enrich, porque
+  `ANTHROPIC_API_KEY` e a unica chave garantida no ambiente.
+
+### UI
+- **Primeira versao (substituida no mesmo dia):** drawer lateral dentro do
+  kanban, com badge no `kanban-card` e auto-abertura 1x/dia via localStorage.
+  Ver a entrada seguinte — o copiloto foi movido para a pagina principal.
+- Estado derivado em vez de sincronizado: o indice da fila e clampeado no render
+  e a proposta fica amarrada a `questionKey`, entao trocar de pergunta a invalida
+  sozinho. Isso eliminou 4 `useEffect` de limpeza.
+
+### Build
+- `npm run build` passa com zero erros; rota `/api/copilot/interpret` no output.
+- `tsc --noEmit` sem erros.
+- Lint: os arquivos novos estao limpos, exceto o efeito de auto-abertura, que e
+  legitimamente um efeito. Os demais avisos sao o idioma `useEffect(() => fetch(),
+  [fetch])` que ja existia em todos os hooks do projeto.
+
+### Pendente
+- Migration `009_copilot.sql` rodada no Supabase em 2026-08-19.
+- Fase 2 (rascunhos de WhatsApp) e Fase 3 (Gmail + Calendar) ainda nao iniciadas.
+  A quick action "Redigir retomada" ja existe em `stalled_card` mas mostra um
+  toast de "chega na proxima fase".
+
+---
+
+## 2026-08-19 — Copiloto movido para a pagina principal
+
+- **Motivo:** o kanban tinha sido escolhido como "playground" do novo modelo de
+  experiencia, mas o copiloto e um **ritual diario**, e ritual pertence a tela em
+  que voce cai ao abrir o app. Dentro do kanban ele dependia de um drawer que
+  precisava se auto-abrir para ser lembrado — sintoma de estar no lugar errado.
+- **Solucao:** `copilot-panel.tsx`, um Card inline no topo de `/dashboard`.
+  `copilot-drawer.tsx` e `copilot-trigger-button.tsx` foram DELETADOS.
+  `kanban-board.tsx`, `kanban-column.tsx` e `kanban-card.tsx` voltaram ao estado
+  original — o board nao tem mais nada de copiloto.
+- **Ganho de layout:** a home e larga, entao o painel mostra a pergunta atual
+  (2/3) ao lado da fila inteira clicavel (1/3). No drawer estreito so cabia uma
+  pergunta por vez, sem nocao de quanto faltava.
+- **Sumiu a auto-abertura:** sendo a pagina inicial, a fila ja esta na frente do
+  usuario. `localStorage.copilotLastOpened` nao existe mais.
+- **Fix de passagem:** o "Pipeline Overview" do dashboard contava **pessoas** por
+  coluna do kanban — defasado desde que o board virou de empresas, e contradizia
+  o proprio kanban logo ao lado. Agora conta empresas. De quebra, era um count
+  por coluna (N+1, 10 round-trips); virou uma query so, agregada em JS.
+
+### Build
+- `npm run build` passa com zero erros; `tsc --noEmit` sem erros.
+- Os arquivos do copiloto ficaram limpos no lint. O unico aviso na home e o
+  idioma `useEffect(() => fetch(), [fetch])`, ja presente nos 13 hooks do projeto.

@@ -266,6 +266,59 @@ CRM pessoal para gerenciar contatos profissionais (People), empresas (Companies)
 
 ---
 
+## Modulo 11: Copiloto Comercial
+
+Transforma o CRM de passivo em proativo: em vez de esperar o usuario registrar,
+o app detecta o que esta estranho no pipeline e pergunta. Vive na pagina
+principal (`/dashboard`), como secao inline acima das metricas — e a primeira
+coisa que aparece ao abrir o CRM.
+
+### 11.1 Deteccao (`src/lib/pipeline/rules.ts`)
+- Perguntas sao **computadas a cada load**, nunca persistidas — dependem de estado
+  mutavel (dias sem evento, next step vencido) e ficariam obsoletas na hora
+- 9 regras, por prioridade: `meeting_yesterday` (100), `next_step_overdue` (95),
+  `no_next_step` (90), `frozen_candidate` (85), `stalled_card` (80),
+  `no_signal_past_stage` (70), `exit_criteria_unmet` (60), `missing_champion` (50),
+  `missing_pain_hypothesis` (40)
+- Teto de `COPILOT_MAX_PER_COMPANY` (2) por empresa e `COPILOT_DAILY_LIMIT` (10) no total
+- Estagios terminais (Ganho/Perdido/Gelado) nao geram pergunta
+
+### 11.2 Derivacoes compartilhadas (`src/lib/pipeline/`)
+- `snapshot.ts` — `fetchPipelineSnapshot()`: uma leitura para colunas, empresas,
+  stage events, sinais, next steps pendentes e (opcional) activities e people
+- `metrics.ts` — `computePipelineMetrics()`, consumido por `/pipeline`
+- `stages.ts` — TERMINAL_STAGES, OUTCOME_STAGES, `nextStage`/`prevStage`,
+  `daysSinceClientEvent`, `daysInCurrentStage`
+- `move.ts` — `applyStageMove()`, usado pelo drag&drop e pelo copiloto
+- Metricas e copiloto leem a mesma fonte; nao ha logica duplicada
+
+### 11.3 Respostas rapidas
+- Cada pergunta traz 2-4 botoes que escrevem direto no banco
+- **Invariante:** `last_client_event_at` so sobe quando o CLIENTE fez algo.
+  "Cobrei, aguardando", "Concluido" e "Reuniao nao aconteceu" nao bumpam
+- Cada resposta grava linha em `copilot_question_events` com `suppress_until`,
+  que e o unico mecanismo de dedup/snooze/dismiss
+
+### 11.4 Texto livre (`/api/copilot/interpret`)
+- O usuario narra o que aconteceu; Claude Haiku extrai sinal, estagio, proximo
+  passo, champion e hipotese de dor
+- Contexto da conta montado **no servidor** — nunca aceito do cliente
+- Devolve uma **proposta**, nunca aplica: o usuario confirma item a item
+- Clamps: descarta estagio invalido, descarta sinal ja capturado, e bloqueia
+  movimento de estagio quando `confidence === "low"`
+
+### 11.5 UI
+- `copilot-panel.tsx` — Card inline renderizado no topo de `/dashboard`.
+  Layout de 3 colunas: pergunta atual (2/3) + fila clicavel das demais (1/3)
+- `copilot-question-card.tsx` — titulo, botoes de resposta rapida, textarea de
+  narracao (Ctrl+Enter envia)
+- `copilot-proposal-review.tsx` — a proposta como checkboxes pre-marcados
+- O kanban NAO tem copiloto: e so o board. Toda a experiencia esta na home
+- Sem auto-abertura ou trigger: sendo a pagina inicial, a fila ja esta visivel
+- `onApplied` recarrega as metricas do dashboard depois de cada escrita
+
+---
+
 ## Database Schema
 
 ### Tabelas
@@ -280,6 +333,7 @@ CRM pessoal para gerenciar contatos profissionais (People), empresas (Companies)
 | `company_documents` | id, user_id, company_id (FK), name, file_path, file_size, mime_type, doc_type, description |
 | `company_activities` | id, user_id, company_id (FK), type, title, description, date |
 | `company_next_steps` | id, user_id, company_id (FK), title, description, due_date, status, completed_at |
+| `copilot_question_events` | id, user_id, company_id (FK), question_key, rule_id, status, action_id, answer_text, applied (JSONB), suppress_until |
 
 ### Storage Buckets
 | Bucket | Acesso | Estrutura |
@@ -293,4 +347,4 @@ CRM pessoal para gerenciar contatos profissionais (People), empresas (Companies)
 
 ### Triggers / Functions
 - `handle_updated_at()` — atualiza `updated_at` automaticamente
-- `create_default_kanban_columns(p_user_id)` — cria 5 colunas padrao
+- `create_default_kanban_columns(p_user_id)` — cria as 10 colunas padrao do funil PT-BR

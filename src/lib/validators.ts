@@ -76,3 +76,52 @@ export const documentUploadSchema = z.object({
   doc_type: z.enum(['contract', 'proposal', 'invoice', 'report', 'other']),
   description: z.string().optional().or(z.literal('')),
 })
+
+// ---------------------------------------------------------------------------
+// Copiloto
+// ---------------------------------------------------------------------------
+
+export const commitmentSignalEnum = z.enum([
+  'second_interlocutor',
+  'presented_internally',
+  'shared_real_data',
+  'allocated_team_member',
+  'asked_price',
+  'security_process',
+])
+
+export const copilotInterpretRequestSchema = z.object({
+  companyId: z.string().regex(uuidRegex, 'Invalid UUID'),
+  questionKey: z.string().min(1).max(200),
+  ruleId: z.string().min(1).max(50),
+  questionTitle: z.string().max(500),
+  narration: z.string().min(3).max(4000),
+})
+
+export type CopilotInterpretRequest = z.infer<typeof copilotInterpretRequestSchema>
+
+// Saída do modelo. Tudo tem default para que uma resposta parcial ainda valide —
+// o que o modelo omitir vira "não afirmou nada sobre isso".
+export const copilotUpdateProposalSchema = z.object({
+  summary: z.string().max(500).default(''),
+  client_event_today: z.boolean().default(false),
+  stage_move: z.enum(['none', 'advance', 'retreat', 'frozen', 'won', 'lost']).default('none'),
+  stage_target_title: z.string().max(100).nullable().default(null),
+  commitment_signals: z.array(commitmentSignalEnum).max(6).default([]),
+  next_step: z
+    .object({
+      title: z.string().min(1).max(300),
+      due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().default(null),
+    })
+    .nullable()
+    .default(null),
+  fields: z
+    .object({
+      champion_name: z.string().max(200).nullable().default(null),
+      economic_buyer_name: z.string().max(200).nullable().default(null),
+      pain_hypothesis: z.string().max(1000).nullable().default(null),
+    })
+    .default({ champion_name: null, economic_buyer_name: null, pain_hypothesis: null }),
+  note: z.string().max(2000).nullable().default(null),
+  confidence: z.enum(['high', 'medium', 'low']).default('medium'),
+})
