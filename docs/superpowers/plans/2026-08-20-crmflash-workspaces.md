@@ -295,7 +295,26 @@ git commit -m "test: script de verificação de isolamento por workspace (falha 
 
 **Interfaces:**
 - Consumes: schema atual (15 tabelas, ~59 policies, 2 policies de storage)
-- Produces: `workspaces`, `workspace_members`, `workspace_invitations`, `current_workspace()`, coluna `workspace_id` nas 13 tabelas, `create_default_kanban_columns(p_workspace_id uuid)`
+- Produces: `workspaces`, `workspace_members`, `workspace_invitations`, `current_workspace()`, `default_workspace()`, coluna `workspace_id` nas 13 tabelas, `create_default_kanban_columns(p_workspace_id uuid)`
+
+> **Correções aplicadas durante a execução.** O SQL abaixo foi o rascunho; o
+> arquivo commitado em `supabase/migrations/010_workspaces.sql` é a verdade.
+> Três diferenças, todas encontradas pelos passos de conferência desta task:
+>
+> 1. **Títulos das colunas do kanban.** O rascunho inventou "Contato Iniciado /
+>    Conversa Ativa / Dor Confirmada / Proposta / Negociação". Os reais, da
+>    `008_kanban_pipeline.sql`, são "Contato / Diagnóstico / Dor validada /
+>    Solução desenhada / Prova / Aprovação".
+> 2. **`default_workspace()` em vez de `current_workspace()` no DEFAULT.** As
+>    rotas `/api/integration/*` escrevem com **service role**, onde `auth.uid()`
+>    é nulo — o DEFAULT viraria NULL e todo "Enviar ao CRM" do TranscriptionApp
+>    quebraria entre os dois deploys. `default_workspace()` cai para o workspace
+>    único quando `auth.uid()` não resolve, e devolve NULL (falhando alto)
+>    assim que existir mais de um.
+> 3. **Lookup da foreign key.** Casava por nome (`conname like '%user_id%'`) e
+>    pulava calado se não achasse, deixando o `ON DELETE CASCADE` no lugar.
+>    Agora casa por coluna e tabela referenciada, e `raise exception` se não
+>    encontrar.
 
 - [ ] **Step 1: Escrever a migration**
 
