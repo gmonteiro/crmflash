@@ -100,20 +100,65 @@ export const copilotInterpretRequestSchema = z.object({
 
 export type CopilotInterpretRequest = z.infer<typeof copilotInterpretRequestSchema>
 
+// O prompt manda o modelo usar "title", mas modelo nenhum obedece 100% do tempo:
+// se ele inventar outro nome de chave a proposta inteira era descartada e o
+// usuário via "não consegui interpretar". Aqui só renomeamos — nada é inventado,
+// e um objeto sem nenhum texto aproveitável continua falhando na validação.
+const NEXT_STEP_TITLE_ALIASES = ['description', 'task', 'titulo', 'título', 'name', 'step']
+
+function normalizeNextStep(value: unknown): unknown {
+  // Alguns retornos vêm como lista quando a narração cita mais de um compromisso.
+  // Ficamos com o primeiro: o schema aceita um passo só, e propor o errado é pior
+  // que propor menos — o usuário confirma item a item de qualquer jeito.
+  const raw = Array.isArray(value) ? (value.length > 0 ? value[0] : null) : value
+  if (!raw || typeof raw !== 'object') return raw
+
+  const obj = raw as Record<string, unknown>
+  const title =
+    typeof obj.title === 'string'
+      ? obj.title
+      : obj[NEXT_STEP_TITLE_ALIASES.find((key) => typeof obj[key] === 'string') ?? '']
+
+  // Uma data em formato inesperado ("2026-08-21T00:00:00", "amanhã") não pode
+  // derrubar o passo inteiro: aproveitamos o prefixo ISO quando existe e, quando
+  // não existe, ficamos sem data — o usuário preenche na hora de confirmar.
+  const due = typeof obj.due_date === 'string' ? obj.due_date.slice(0, 10) : null
+  const due_date = due && /^\d{4}-\d{2}-\d{2}$/.test(due) ? due : null
+
+  return { ...obj, title, due_date }
+}
+
+// Sinal fora da lista é descartado, não invalida a proposta. O modelo às vezes
+// inventa um rótulo em português; perder um sinal é bem melhor que perder tudo.
+function dropUnknownSignals(value: unknown): unknown {
+  if (!Array.isArray(value)) return value
+  const allowed = commitmentSignalEnum.options as readonly string[]
+  return value.filter((item) => typeof item === 'string' && allowed.includes(item))
+}
+
 // Saída do modelo. Tudo tem default para que uma resposta parcial ainda valide —
 // o que o modelo omitir vira "não afirmou nada sobre isso".
 export const copilotUpdateProposalSchema = z.object({
   summary: z.string().max(500).default(''),
   client_event_today: z.boolean().default(false),
-  stage_move: z.enum(['none', 'advance', 'retreat', 'frozen', 'won', 'lost']).default('none'),
+  stage_move: z
+    .enum(['none', 'advance', 'retreat', 'frozen', 'won', 'lost'])
+    .catch('none')
+    .default('none'),
   stage_target_title: z.string().max(100).nullable().default(null),
-  commitment_signals: z.array(commitmentSignalEnum).max(6).default([]),
+  commitment_signals: z
+    .preprocess(dropUnknownSignals, z.array(commitmentSignalEnum).max(6))
+    .default([]),
   next_step: z
-    .object({
-      title: z.string().min(1).max(300),
-      due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().default(null),
-    })
-    .nullable()
+    .preprocess(
+      normalizeNextStep,
+      z
+        .object({
+          title: z.string().min(1).max(300),
+          due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().default(null),
+        })
+        .nullable()
+    )
     .default(null),
   fields: z
     .object({
@@ -123,5 +168,5 @@ export const copilotUpdateProposalSchema = z.object({
     })
     .default({ champion_name: null, economic_buyer_name: null, pain_hypothesis: null }),
   note: z.string().max(2000).nullable().default(null),
-  confidence: z.enum(['high', 'medium', 'low']).default('medium'),
+  confidence: z.enum(['high', 'medium', 'low']).catch('low').default('medium'),
 })

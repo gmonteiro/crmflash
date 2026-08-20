@@ -82,9 +82,11 @@ ${SIGNAL_REFERENCE}
    - "won"/"lost"/"frozen": desfecho explicitamente narrado.
    - stage_target_title deve ser exatamente um dos estágios válidos listados, ou null.
 
-4. next_step: só se a narração indica um compromisso concreto. due_date em
-   formato yyyy-MM-dd, resolvido contra a data de hoje informada acima. Se não houver
-   data na narração, use null.
+4. next_step: null, ou um objeto com exatamente estas duas chaves:
+   {"title": "o compromisso em uma frase curta", "due_date": "yyyy-MM-dd" ou null}.
+   Use "title" — nunca "description", "task" ou qualquer outro nome de chave.
+   Só preencha se a narração indica um compromisso concreto. due_date resolvido
+   contra a data de hoje informada acima; se não houver data na narração, use null.
 
 5. fields: preencha champion_name, economic_buyer_name ou pain_hypothesis apenas se
    a narração nomear a pessoa ou descrever a dor. Caso contrário null.

@@ -12,6 +12,8 @@ import type { PipelineSnapshot } from "@/lib/pipeline/types"
 import { COMMITMENT_SIGNALS } from "@/lib/constants"
 import type {
   CopilotEffect,
+  CopilotInterpretError,
+  CopilotInterpretResult,
   CopilotQuestion,
   CopilotQuickAction,
   CopilotUpdateProposal,
@@ -19,6 +21,43 @@ import type {
 } from "@/types/copilot"
 
 const DATE_FMT = "yyyy-MM-dd"
+
+const INTERPRET_ERRORS: readonly CopilotInterpretError[] = [
+  "rate_limited",
+  "provider_error",
+  "unparsed",
+  "unauthorized",
+  "not_configured",
+  "forbidden",
+  "bad_request",
+  "not_found",
+  "network",
+]
+
+// O status HTTP é o plano B: o corpo carrega um code explícito porque 502 sozinho
+// não distingue "o provedor caiu" de "o modelo respondeu algo que não valida".
+const STATUS_FALLBACK: Record<number, CopilotInterpretError> = {
+  400: "bad_request",
+  401: "unauthorized",
+  403: "forbidden",
+  404: "not_found",
+  429: "rate_limited",
+  500: "not_configured",
+  502: "provider_error",
+}
+
+async function failureReason(res: Response): Promise<CopilotInterpretError> {
+  try {
+    const body = (await res.json()) as { code?: unknown }
+    const code = body?.code
+    if (typeof code === "string" && (INTERPRET_ERRORS as readonly string[]).includes(code)) {
+      return code as CopilotInterpretError
+    }
+  } catch {
+    // corpo vazio ou não-JSON (proxy, timeout de borda) — cai no status
+  }
+  return STATUS_FALLBACK[res.status] ?? "provider_error"
+}
 const today = () => format(new Date(), DATE_FMT)
 
 // Uma quick action que só abre os rascunhos não altera o CRM nem suprime a
@@ -341,7 +380,7 @@ export function useCopilot() {
   // Manda a narração para o servidor interpretar. Não escreve nada — devolve
   // uma proposta que o usuário revisa item a item antes de aplicar.
   const interpret = useCallback(
-    async (question: CopilotQuestion, narration: string): Promise<CopilotUpdateProposal | null> => {
+    async (question: CopilotQuestion, narration: string): Promise<CopilotInterpretResult> => {
       setInterpreting(true)
       try {
         const res = await fetch("/api/copilot/interpret", {
@@ -355,11 +394,13 @@ export function useCopilot() {
             narration,
           }),
         })
-        if (!res.ok) return null
-        const data = (await res.json()) as { proposal: CopilotUpdateProposal }
-        return data.proposal ?? null
+        if (!res.ok) return { ok: false, reason: await failureReason(res) }
+        const data = (await res.json()) as { proposal?: CopilotUpdateProposal }
+        return data.proposal
+          ? { ok: true, proposal: data.proposal }
+          : { ok: false, reason: "unparsed" }
       } catch {
-        return null
+        return { ok: false, reason: "network" }
       } finally {
         setInterpreting(false)
       }

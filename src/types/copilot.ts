@@ -80,6 +80,24 @@ export interface CopilotUpdateProposal {
   confidence: "high" | "medium" | "low"
 }
 
+// Por que a interpretação falhou. O painel só mostra uma mensagem genérica se
+// não souber o motivo — rate limit, sessão expirada e chave ausente pedem ações
+// diferentes do usuário, e antes todas viravam "não consegui interpretar".
+export type CopilotInterpretError =
+  | "rate_limited"
+  | "provider_error"
+  | "unparsed"
+  | "unauthorized"
+  | "not_configured"
+  | "forbidden"
+  | "bad_request"
+  | "not_found"
+  | "network"
+
+export type CopilotInterpretResult =
+  | { ok: true; proposal: CopilotUpdateProposal }
+  | { ok: false; reason: CopilotInterpretError }
+
 // Quais itens da proposta o usuário marcou para aplicar.
 export interface ProposalSelection {
   client_event: boolean

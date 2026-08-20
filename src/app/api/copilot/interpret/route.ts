@@ -19,7 +19,7 @@ function jsonResponse(data: Record<string, unknown>, status = 200) {
 
 export async function POST(request: Request) {
   if (!verifyCsrfOrigin(request)) {
-    return jsonResponse({ error: "Forbidden" }, 403)
+    return jsonResponse({ error: "Forbidden", code: "forbidden" }, 403)
   }
 
   const rl = rateLimit(rateLimitKey(request, "copilot-interpret"), {
@@ -27,23 +27,23 @@ export async function POST(request: Request) {
     windowMs: 60_000,
   })
   if (!rl.success) {
-    return jsonResponse({ error: "Too many requests" }, 429)
+    return jsonResponse({ error: "Too many requests", code: "rate_limited" }, 429)
   }
 
   if (!hasCopilotApiKey()) {
-    return jsonResponse({ error: "API key not configured." }, 500)
+    return jsonResponse({ error: "API key not configured.", code: "not_configured" }, 500)
   }
 
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
-    return jsonResponse({ error: "Unauthorized" }, 401)
+    return jsonResponse({ error: "Unauthorized", code: "unauthorized" }, 401)
   }
 
   const parsed = copilotInterpretRequestSchema.safeParse(await request.json())
   if (!parsed.success) {
     return jsonResponse(
-      { error: "Validation failed", details: parsed.error.flatten().fieldErrors },
+      { error: "Validation failed", code: "bad_request", details: parsed.error.flatten().fieldErrors },
       400
     )
   }
@@ -85,7 +85,7 @@ export async function POST(request: Request) {
 
   const company = companyRes.data
   if (!company) {
-    return jsonResponse({ error: "Company not found" }, 404)
+    return jsonResponse({ error: "Company not found", code: "not_found" }, 404)
   }
 
   const columns = (columnsRes.data ?? []) as { id: string; title: string; position: number }[]
@@ -117,13 +117,13 @@ export async function POST(request: Request) {
     raw = await getCopilotProvider().interpret(ctx, questionTitle, narration)
   } catch (err) {
     console.error("Copilot interpret error:", err)
-    return jsonResponse({ error: "Não consegui interpretar. Tente de novo." }, 502)
+    return jsonResponse({ error: "Não consegui interpretar. Tente de novo.", code: "provider_error" }, 502)
   }
 
   const validated = copilotUpdateProposalSchema.safeParse(raw)
   if (!validated.success) {
     return jsonResponse(
-      { error: "Não consegui interpretar. Reformule ou use os botões." },
+      { error: "Não consegui interpretar. Reformule ou use os botões.", code: "unparsed" },
       502
     )
   }

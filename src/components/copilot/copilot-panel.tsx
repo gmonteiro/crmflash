@@ -11,7 +11,11 @@ import { cn } from "@/lib/utils"
 import { CopilotQuestionCard } from "./copilot-question-card"
 import { CopilotProposalReview } from "./copilot-proposal-review"
 import { isDraftAction, useCopilot } from "@/hooks/use-copilot"
-import type { CopilotUpdateProposal, ProposalSelection } from "@/types/copilot"
+import type {
+  CopilotInterpretError,
+  CopilotUpdateProposal,
+  ProposalSelection,
+} from "@/types/copilot"
 
 interface CopilotPanelProps {
   /** Chamado depois de qualquer escrita, para o resto da página recarregar. */
@@ -24,6 +28,20 @@ interface PendingProposal {
   questionKey: string
   proposal: CopilotUpdateProposal
   narration: string
+}
+
+// Cada motivo pede uma ação diferente do usuário: esperar, recarregar, reformular
+// ou avisar quem administra. Uma mensagem única para todos escondia o problema real.
+const INTERPRET_ERROR_MESSAGE: Record<CopilotInterpretError, string> = {
+  rate_limited: "Muitas tentativas seguidas. Espere um minuto e tente de novo.",
+  provider_error: "A IA não respondeu agora. Tente de novo em instantes.",
+  unparsed: "Não consegui interpretar. Reformule ou use os botões.",
+  unauthorized: "Sua sessão expirou. Recarregue a página e entre de novo.",
+  not_configured: "A IA não está configurada neste ambiente (falta a chave da API).",
+  forbidden: "Requisição bloqueada por segurança. Recarregue a página.",
+  bad_request: "Texto muito curto ou muito longo para interpretar.",
+  not_found: "Empresa não encontrada. Recarregue a página.",
+  network: "Sem conexão com o servidor. Verifique a internet e tente de novo.",
 }
 
 export function CopilotPanel({ onApplied }: CopilotPanelProps) {
@@ -76,11 +94,11 @@ export function CopilotPanel({ onApplied }: CopilotPanelProps) {
     async (text: string) => {
       if (!current) return
       const result = await interpret(current, text)
-      if (!result) {
-        toast.error("Não consegui interpretar. Reformule ou use os botões.")
+      if (!result.ok) {
+        toast.error(INTERPRET_ERROR_MESSAGE[result.reason])
         return
       }
-      setPending({ questionKey: current.key, proposal: result, narration: text })
+      setPending({ questionKey: current.key, proposal: result.proposal, narration: text })
     },
     [current, interpret]
   )
