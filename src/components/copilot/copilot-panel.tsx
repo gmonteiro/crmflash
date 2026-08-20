@@ -8,11 +8,12 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
-import { CopilotQuestionCard } from "./copilot-question-card"
+import { CopilotCompanyCard } from "./copilot-company-card"
 import { CopilotProposalReview } from "./copilot-proposal-review"
 import { isDraftAction, useCopilot } from "@/hooks/use-copilot"
 import type {
   CopilotInterpretError,
+  CopilotQuestion,
   CopilotUpdateProposal,
   ProposalSelection,
 } from "@/types/copilot"
@@ -22,10 +23,10 @@ interface CopilotPanelProps {
   onApplied?: () => void
 }
 
-// A proposta fica amarrada à pergunta que a gerou: se a fila avança, ela deixa
+// A proposta fica amarrada à conta que a gerou: se a fila avança, ela deixa
 // de ser válida sozinha, sem efeito de limpeza.
 interface PendingProposal {
-  questionKey: string
+  companyId: string
   proposal: CopilotUpdateProposal
   narration: string
 }
@@ -46,16 +47,25 @@ const INTERPRET_ERROR_MESSAGE: Record<CopilotInterpretError, string> = {
 
 export function CopilotPanel({ onApplied }: CopilotPanelProps) {
   const copilot = useCopilot()
-  const { questions, loading, interpreting, runAction, interpret, applyProposal, snoozeAll } =
-    copilot
+  const {
+    queue,
+    loading,
+    interpreting,
+    runAction,
+    interpret,
+    applyProposal,
+    snoozeCompany,
+    snoozeAll,
+  } = copilot
 
-  const [selectedKey, setSelectedKey] = useState<string | null>(null)
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [pending, setPending] = useState<PendingProposal | null>(null)
 
-  // A seleção é derivada: se a pergunta escolhida saiu da fila, cai na primeira.
-  const current = questions.find((q) => q.key === selectedKey) ?? questions[0] ?? null
-  const proposal = pending && current && pending.questionKey === current.key ? pending : null
+  // A seleção é derivada: se a conta escolhida saiu da fila, cai na primeira.
+  const current = queue.find((c) => c.companyId === selectedCompanyId) ?? queue[0] ?? null
+  const proposal = pending && current && pending.companyId === current.companyId ? pending : null
+  const pendingCount = queue.reduce((sum, c) => sum + c.pendings.length, 0)
 
   const afterWrite = useCallback(
     (ok: boolean) => {
@@ -69,10 +79,10 @@ export function CopilotPanel({ onApplied }: CopilotPanelProps) {
     [onApplied]
   )
 
+  // Atalho resolve UMA pendência: o resto do card continua de pé.
   const handleAction = useCallback(
-    async (actionId: string) => {
-      if (!current) return
-      const action = current.actions.find((a) => a.id === actionId)
+    async (question: CopilotQuestion, actionId: string) => {
+      const action = question.actions.find((a) => a.id === actionId)
       if (!action) return
 
       // Rascunhos chegam na Fase 2 — a ação existe mas ainda não tem tela.
@@ -82,12 +92,11 @@ export function CopilotPanel({ onApplied }: CopilotPanelProps) {
       }
 
       setBusy(true)
-      const ok = await runAction(current, actionId)
+      const ok = await runAction(question, actionId)
       setBusy(false)
-      setSelectedKey(null)
       afterWrite(ok)
     },
-    [current, runAction, afterWrite]
+    [runAction, afterWrite]
   )
 
   const handleNarrate = useCallback(
@@ -98,7 +107,7 @@ export function CopilotPanel({ onApplied }: CopilotPanelProps) {
         toast.error(INTERPRET_ERROR_MESSAGE[result.reason])
         return
       }
-      setPending({ questionKey: current.key, proposal: result.proposal, narration: text })
+      setPending({ companyId: current.companyId, proposal: result.proposal, narration: text })
     },
     [current, interpret]
   )
@@ -110,11 +119,23 @@ export function CopilotPanel({ onApplied }: CopilotPanelProps) {
       const ok = await applyProposal(current, proposal.proposal, selection, proposal.narration)
       setBusy(false)
       setPending(null)
-      setSelectedKey(null)
+      setSelectedCompanyId(null)
       afterWrite(ok)
     },
     [current, proposal, applyProposal, afterWrite]
   )
+
+  const handleSnoozeCompany = useCallback(async () => {
+    if (!current) return
+    setBusy(true)
+    const ok = await snoozeCompany(current)
+    setBusy(false)
+    setSelectedCompanyId(null)
+    if (ok) {
+      toast.success(`${current.companyName} adiada para amanhã`)
+      onApplied?.()
+    }
+  }, [current, snoozeCompany, onApplied])
 
   const handleSnoozeAll = useCallback(async () => {
     const ok = await snoozeAll()
@@ -131,21 +152,21 @@ export function CopilotPanel({ onApplied }: CopilotPanelProps) {
           <CardTitle className="flex items-center gap-2 text-base">
             <Sparkles className="h-4 w-4 text-violet-500" />
             Copiloto
-            {!loading && questions.length > 0 && (
+            {!loading && queue.length > 0 && (
               <Badge variant="secondary" className="h-5 px-1.5 text-[11px]">
-                {questions.length}
+                {queue.length}
               </Badge>
             )}
           </CardTitle>
           <p className="text-sm text-muted-foreground">
             {loading
               ? "Lendo o pipeline…"
-              : questions.length === 0
+              : queue.length === 0
                 ? "Nada pedindo sua atenção agora."
-                : "O que aconteceu nas suas contas desde ontem?"}
+                : `${queue.length} ${queue.length === 1 ? "conta precisa" : "contas precisam"} de você · ${pendingCount} ${pendingCount === 1 ? "pendência" : "pendências"}`}
           </p>
         </div>
-        {!loading && questions.length > 0 && (
+        {!loading && queue.length > 0 && (
           <Button variant="ghost" size="sm" onClick={handleSnoozeAll}>
             Adiar tudo
           </Button>
@@ -179,44 +200,46 @@ export function CopilotPanel({ onApplied }: CopilotPanelProps) {
                   onDiscard={() => setPending(null)}
                 />
               ) : (
-                <CopilotQuestionCard
-                  // Remonta a cada pergunta, zerando o rascunho de narração.
-                  key={current.key}
-                  question={current}
+                <CopilotCompanyCard
+                  // Remonta a cada conta, zerando o rascunho de narração.
+                  key={current.companyId}
+                  item={current}
                   busy={busy}
                   interpreting={interpreting}
                   onAction={handleAction}
                   onNarrate={handleNarrate}
+                  onSnoozeCompany={handleSnoozeCompany}
                 />
               )}
             </div>
 
-            {questions.length > 1 && (
+            {queue.length > 1 && (
               <div className="space-y-2 lg:border-l lg:pl-6">
                 <p className="text-xs font-medium text-muted-foreground">
-                  Na fila ({questions.length})
+                  Na fila ({queue.length})
                 </p>
                 <div className="space-y-1">
-                  {questions.map((q) => (
+                  {queue.map((item) => (
                     <button
-                      key={q.key}
-                      onClick={() => setSelectedKey(q.key)}
+                      key={item.companyId}
+                      onClick={() => setSelectedCompanyId(item.companyId)}
                       className={cn(
                         "w-full rounded-md border p-2 text-left transition-colors hover:bg-muted/50",
-                        q.key === current.key
+                        item.companyId === current.companyId
                           ? "border-violet-500/50 bg-violet-500/5"
                           : "border-transparent"
                       )}
                     >
                       <span className="flex items-center gap-1.5 text-xs font-medium">
                         <Building2 className="h-3 w-3 shrink-0 text-muted-foreground" />
-                        <span className="truncate">{q.companyName}</span>
-                      </span>
-                      {q.subtitle && (
-                        <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
-                          {q.subtitle}
+                        <span className="truncate">{item.companyName}</span>
+                        <span className="ml-auto shrink-0 text-[11px] font-normal text-muted-foreground">
+                          {item.pendings.length}
                         </span>
-                      )}
+                      </span>
+                      <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
+                        {item.pendings[0]?.title}
+                      </span>
                     </button>
                   ))}
                 </div>

@@ -1,3 +1,5 @@
+import type { CopilotRuleId } from '@/types/copilot'
+
 export const INDUSTRIES = [
   'Technology',
   'Healthcare',
@@ -70,10 +72,27 @@ export const FROZEN_DAYS = 30
 // Copiloto comercial
 // ---------------------------------------------------------------------------
 
-// Quantas perguntas mostrar por dia, e no máximo quantas da mesma empresa —
-// sem isso uma conta bagunçada monopoliza a fila inteira.
-export const COPILOT_DAILY_LIMIT = 10
-export const COPILOT_MAX_PER_COMPANY = 2
+// A fila é por EMPRESA: um card por conta, com todas as pendências dela dentro.
+// COPILOT_DAILY_LIMIT conta empresas (não perguntas) e MAX_PER_COMPANY é quantas
+// pendências cabem num card — acima disso o card vira parede e ninguém responde.
+export const COPILOT_DAILY_LIMIT = 6
+export const COPILOT_MAX_PER_COMPANY = 4
+
+// Quando você responde um card inteiro em texto livre, as pendências que a
+// narração NÃO resolveu por dado ficam suprimidas por estes dias: você já
+// respondeu a conta, o copiloto não insiste amanhã. Valor por regra porque
+// "champion não mapeado" pode esperar bem mais que "card parado".
+export const NARRATION_SUPPRESS_DAYS: Record<CopilotRuleId, number> = {
+  meeting_yesterday: 3,
+  next_step_overdue: 3,
+  no_next_step: 3,
+  frozen_candidate: 7,
+  stalled_card: 3,
+  no_signal_past_stage: 7,
+  exit_criteria_unmet: 7,
+  missing_champion: 7,
+  missing_pain_hypothesis: 14,
+}
 
 // Dias no mesmo estágio antes de o copiloto cobrar o critério de saída.
 export const STAGE_DWELL_DAYS = 10

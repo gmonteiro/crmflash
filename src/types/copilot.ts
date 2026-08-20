@@ -62,6 +62,19 @@ export interface CopilotQuestion {
   allowFreeText: boolean
 }
 
+// A fila mostrada ao usuário: uma entrada por empresa, com todas as pendências
+// daquela conta. As perguntas continuam atômicas (uma regra → uma pergunta) —
+// isto é só a visão agrupada, derivada delas.
+export interface CompanyQueueItem {
+  companyId: string
+  companyName: string
+  stageTitle: string | null
+  /** A maior prioridade entre as pendências: define a posição da conta na fila. */
+  priority: number
+  /** Ordenadas por prioridade → severidade, já cortadas pelo teto do card. */
+  pendings: CopilotQuestion[]
+}
+
 // Proposta que o LLM devolve a partir da narração em texto livre. Nunca é
 // aplicada direto — o usuário confirma item a item.
 export interface CopilotUpdateProposal {

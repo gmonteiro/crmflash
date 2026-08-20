@@ -1,16 +1,18 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { addDays, format } from "date-fns"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { createClient } from "@/lib/supabase/client"
 import { fetchPipelineSnapshot } from "@/lib/pipeline/snapshot"
 import { detectQuestions } from "@/lib/pipeline/rules"
+import { buildCompanyQueue } from "@/lib/pipeline/queue"
 import { applyStageMove } from "@/lib/pipeline/move"
 import { nextStage, prevStage, stageByTitle, colById } from "@/lib/pipeline/stages"
 import type { PipelineSnapshot } from "@/lib/pipeline/types"
-import { COMMITMENT_SIGNALS } from "@/lib/constants"
+import { COMMITMENT_SIGNALS, NARRATION_SUPPRESS_DAYS } from "@/lib/constants"
 import type {
+  CompanyQueueItem,
   CopilotEffect,
   CopilotInterpretError,
   CopilotInterpretResult,
@@ -380,17 +382,23 @@ export function useCopilot() {
   // Manda a narração para o servidor interpretar. Não escreve nada — devolve
   // uma proposta que o usuário revisa item a item antes de aplicar.
   const interpret = useCallback(
-    async (question: CopilotQuestion, narration: string): Promise<CopilotInterpretResult> => {
+    async (item: CompanyQueueItem, narration: string): Promise<CopilotInterpretResult> => {
+      const lead = item.pendings[0]
+      if (!lead) return { ok: false, reason: "bad_request" }
+
       setInterpreting(true)
       try {
         const res = await fetch("/api/copilot/interpret", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            companyId: question.companyId,
-            questionKey: question.key,
-            ruleId: question.ruleId,
-            questionTitle: question.title,
+            companyId: item.companyId,
+            questionKey: lead.key,
+            ruleId: lead.ruleId,
+            // O modelo recebe TODAS as pendências do card, não só a principal:
+            // sabendo que falta champion e próximo passo, ele extrai os dois da
+            // mesma narração em vez de responder só a pergunta do topo.
+            questionTitle: item.pendings.map((p) => p.title).join(" | ").slice(0, 500),
             narration,
           }),
         })
@@ -410,7 +418,7 @@ export function useCopilot() {
 
   const applyProposal = useCallback(
     async (
-      question: CopilotQuestion,
+      item: CompanyQueueItem,
       proposal: CopilotUpdateProposal,
       sel: ProposalSelection,
       narration: string
@@ -419,7 +427,13 @@ export function useCopilot() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return false
 
-      setQuestions((prev) => prev.filter((q) => q.key !== question.key))
+      // A pendência mais prioritária responde pelos efeitos: applyEffect só usa
+      // company_id, e o log de auditoria de cada pendência vem depois, no passo 7.
+      const question = item.pendings[0]
+      if (!question) return false
+
+      // Otimista: o card inteiro sai da fila, porque a narração responde a conta.
+      setQuestions((prev) => prev.filter((q) => q.companyId !== item.companyId))
 
       try {
         // 1. Campos de texto da conta.
@@ -477,13 +491,21 @@ export function useCopilot() {
           if (effect) await applyEffect(supabase, user.id, question, effect)
         }
 
-        // 7. Auditoria: o que a narração de fato alterou.
-        await recordEvent(supabase, user.id, question, {
-          status: "answered",
-          suppressDays: 3,
-          answerText: narration,
-          applied: { proposal, selection: sel } as unknown as Record<string, unknown>,
-        })
+        // 7. Auditoria: um evento por pendência exibida no card. Narrar responde a
+        //    conta toda — o que a narração resolveu por dado some sozinho no
+        //    próximo load (as regras recomputam), e o que continua verdadeiro fica
+        //    suprimido pelos dias da própria regra em vez de voltar amanhã.
+        for (const pending of item.pendings) {
+          await recordEvent(supabase, user.id, pending, {
+            status: "answered",
+            suppressDays: NARRATION_SUPPRESS_DAYS[pending.ruleId] ?? 3,
+            answerText: narration,
+            applied:
+              pending.key === question.key
+                ? ({ proposal, selection: sel } as unknown as Record<string, unknown>)
+                : null,
+          })
+        }
         return true
       } catch {
         fetchQuestions()
@@ -493,14 +515,27 @@ export function useCopilot() {
     [applyEffect, recordEvent, fetchQuestions]
   )
 
-  const countsByCompany = new Map<string, number>()
-  for (const q of questions) {
-    countsByCompany.set(q.companyId, (countsByCompany.get(q.companyId) ?? 0) + 1)
-  }
+  // Adiar a conta inteira: mesmo efeito de "já respondi isso hoje", só que
+  // explícito e por 1 dia, sem passar pela IA.
+  const snoozeCompany = useCallback(
+    async (item: CompanyQueueItem, days = 1): Promise<boolean> => {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return false
+
+      setQuestions((prev) => prev.filter((q) => q.companyId !== item.companyId))
+      for (const pending of item.pendings) {
+        await recordEvent(supabase, user.id, pending, { status: "snoozed", suppressDays: days })
+      }
+      return true
+    },
+    [recordEvent]
+  )
+
+  const queue = useMemo(() => buildCompanyQueue(questions), [questions])
 
   return {
-    questions,
-    countsByCompany,
+    queue,
     loading,
     interpreting,
     refetch: fetchQuestions,
@@ -508,6 +543,7 @@ export function useCopilot() {
     interpret,
     applyProposal,
     snooze,
+    snoozeCompany,
     snoozeAll,
     dismiss,
   }

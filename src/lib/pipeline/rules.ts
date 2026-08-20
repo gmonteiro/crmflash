@@ -486,12 +486,15 @@ const RULES = [
 ] as const
 
 export interface DetectOptions {
+  /** Teto de EMPRESAS no dia (a fila é agrupada por conta). */
   limit?: number
+  /** Teto de pendências por empresa — é o que cabe num card. */
   maxPerCompany?: number
 }
 
 // Roda todas as regras sobre o snapshot, descarta as chaves suprimidas e devolve
-// a fila do dia ordenada por prioridade → severidade.
+// as pendências do dia ordenadas por prioridade → severidade. Continuam atômicas
+// (uma regra → uma pergunta); quem agrupa por empresa é buildCompanyQueue.
 export function detectQuestions(
   snap: PipelineSnapshot,
   suppressedKeys: Set<string>,
@@ -519,10 +522,14 @@ export function detectQuestions(
   const queue: CopilotQuestion[] = []
   for (const q of found) {
     const n = perCompany.get(q.companyId) ?? 0
+    // Teto do card: acima disto a conta vira parede e ninguém responde.
     if (n >= maxPerCompany) continue
+    // Teto do dia. Só barra conta NOVA — uma empresa que já entrou continua
+    // podendo somar pendências, senão o corte cairia no meio de um card e o
+    // usuário responderia uma conta pela metade sem saber que faltava algo.
+    if (n === 0 && perCompany.size >= limit) continue
     perCompany.set(q.companyId, n + 1)
     queue.push(q)
-    if (queue.length >= limit) break
   }
 
   return queue

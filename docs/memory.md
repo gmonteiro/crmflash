@@ -426,3 +426,21 @@ sem esse teto uma conta bagunçada monopoliza a fila inteira.
 - `npm run build` passa com zero erros; `tsc --noEmit` sem erros.
 - Os arquivos do copiloto ficaram limpos no lint. O unico aviso na home e o
   idioma `useEffect(() => fetch(), [fetch])`, ja presente nos 13 hooks do projeto.
+
+## Copiloto: fila por empresa (2026-08-20)
+
+- **Sintoma:** a fila "repetia empresas". Era o teto de 2 perguntas por conta
+  somado a uma lista lateral que usa o nome da empresa como titulo de cada item.
+- **Decisao:** a fila virou por EMPRESA. `buildCompanyQueue`
+  (`src/lib/pipeline/queue.ts`) agrupa as perguntas atomicas num card por conta;
+  `rules.ts` nao mudou de contrato — uma regra continua produzindo uma pergunta,
+  que e o que mantem `question_key` estavel para a supressao.
+- **Tetos mudaram de significado:** `COPILOT_DAILY_LIMIT` = 6 EMPRESAS/dia (era
+  10 perguntas) e `COPILOT_MAX_PER_COMPANY` = 4 pendencias por CARD (era 2 por
+  empresa). O corte diario so barra conta nova, senao cortaria um card no meio.
+- **Narrar responde o card todo:** grava um `copilot_question_events` por
+  pendencia exibida, com `NARRATION_SUPPRESS_DAYS[ruleId]`. O que a narracao
+  resolveu por dado some sozinho (regras recomputam); o resto nao volta amanha.
+- **Testes:** o projeto ganhou `vitest` (`npm test`). Primeiros testes:
+  `queue.test.ts` e `rules.test.ts` (tetos, ordem, supressao).
+- **Design completo:** `docs/superpowers/specs/2026-08-20-copiloto-fila-por-empresa-design.md`
