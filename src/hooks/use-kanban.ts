@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client"
 import type { KanbanColumn, Company } from "@/types/database"
 import type { KanbanColumnWithCards, KanbanCardCompany } from "@/types/kanban"
 import { calculatePosition } from "@/lib/kanban/position"
+import { applyStageMove } from "@/lib/pipeline/move"
 
 export function useKanban() {
   const [columns, setColumns] = useState<KanbanColumnWithCards[]>([])
@@ -116,46 +117,21 @@ export function useKanban() {
     )
 
     const supabase = createClient()
-
-    // Se mudou de coluna, determina a direção e loga o evento de estágio.
-    const changedColumn = !fromCol || fromCol.id !== targetColumnId
-    let direction: "enter" | "advance" | "retreat" | "frozen" | null = null
-    if (changedColumn) {
-      const isFrozen = /gelad/i.test(targetCol.title)
-      if (!fromCol) direction = "enter"
-      else if (isFrozen) direction = "frozen"
-      else if (targetCol.position > fromCol.position) direction = "advance"
-      else if (targetCol.position < fromCol.position) direction = "retreat"
-      else direction = "advance"
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      fetchBoard()
+      return
     }
 
-    // Avanço reflete uma ação do cliente → registra evento do cliente.
-    const bumpClientEvent = direction === "advance"
-
-    const companyUpdate: Record<string, unknown> = {
-      kanban_column_id: targetColumnId,
-      kanban_position: newPosition,
-    }
-    if (bumpClientEvent) companyUpdate.last_client_event_at = new Date().toISOString()
-
-    await supabase.from("companies").update(companyUpdate).eq("id", companyId)
-
-    if (direction) {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        await supabase.from("company_stage_events").insert({
-          user_id: user.id,
-          company_id: companyId,
-          from_column_id: fromCol?.id ?? null,
-          to_column_id: targetColumnId,
-          from_title: fromCol?.title ?? null,
-          to_title: targetCol.title,
-          from_position: fromCol?.position ?? null,
-          to_position: targetCol.position,
-          direction,
-        })
-      }
-    }
+    await applyStageMove(supabase, {
+      userId: user.id,
+      companyId,
+      from: fromCol
+        ? { id: fromCol.id, title: fromCol.title, position: fromCol.position }
+        : null,
+      to: { id: targetCol.id, title: targetCol.title, position: targetCol.position },
+      position: newPosition,
+    })
   }
 
   async function reorderColumns(activeId: string, overIndex: number) {
