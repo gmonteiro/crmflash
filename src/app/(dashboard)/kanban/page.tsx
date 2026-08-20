@@ -3,10 +3,8 @@
 import { KanbanBoard } from "@/components/kanban/kanban-board"
 
 export default function KanbanPage() {
-  return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Kanban Board</h1>
-      <KanbanBoard />
-    </div>
-  )
+  // Titulo e acoes vivem dentro do board: os dialogs precisam das colunas e dos
+  // handlers do useKanban, e erguer esse estado ate a page so pra posicionar dois
+  // botoes seria pior que o board ser dono do proprio cabecalho.
+  return <KanbanBoard />
 }

@@ -11,9 +11,11 @@ import { cn } from "@/lib/utils"
 
 interface AddColumnDialogProps {
   onAdd: (title: string, color: string) => void
+  /** O board ainda está carregando: o botão aparece, mas não abre. */
+  disabled?: boolean
 }
 
-export function AddColumnDialog({ onAdd }: AddColumnDialogProps) {
+export function AddColumnDialog({ onAdd, disabled }: AddColumnDialogProps) {
   const [open, setOpen] = useState(false)
   const [title, setTitle] = useState("")
   const [color, setColor] = useState<string>(KANBAN_COLORS[0])
@@ -29,7 +31,7 @@ export function AddColumnDialog({ onAdd }: AddColumnDialogProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" className="h-10 shrink-0">
+        <Button variant="outline" size="sm" disabled={disabled}>
           <Plus className="mr-2 h-4 w-4" />
           Add Column
         </Button>

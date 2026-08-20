@@ -14,9 +14,11 @@ import type { Company, KanbanColumn } from "@/types/database"
 interface AddCompanyDialogProps {
   columns: KanbanColumn[]
   onAdd: (companyId: string, columnId?: string) => Promise<void>
+  /** O board ainda está carregando: sem colunas, o dialog não teria destino. */
+  disabled?: boolean
 }
 
-export function AddCompanyDialog({ columns, onAdd }: AddCompanyDialogProps) {
+export function AddCompanyDialog({ columns, onAdd, disabled }: AddCompanyDialogProps) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState("")
   const [columnId, setColumnId] = useState<string>("")
@@ -72,7 +74,7 @@ export function AddCompanyDialog({ columns, onAdd }: AddCompanyDialogProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" className="h-10 shrink-0">
+        <Button size="sm" disabled={disabled}>
           <Building2 className="mr-2 h-4 w-4" />
           Add Company
         </Button>

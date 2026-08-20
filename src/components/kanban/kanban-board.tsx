@@ -76,43 +76,59 @@ export function KanbanBoard() {
     [columns, moveCard, reorderColumns]
   )
 
+  // O cabeçalho é o mesmo carregando ou não: os botões de adicionar não podem
+  // depender do board terminar de carregar para aparecer no lugar certo.
+  const header = (
+    <div className="flex items-center justify-between gap-4">
+      <h1 className="text-2xl font-bold">Kanban Board</h1>
+      <div className="flex items-center gap-2">
+        <AddCompanyDialog columns={columns} onAdd={addCompanyToBoard} disabled={loading} />
+        <AddColumnDialog onAdd={addColumn} disabled={loading} />
+      </div>
+    </div>
+  )
+
   if (loading) {
     return (
-      <div className="flex gap-4">
-        {[1, 2, 3, 4, 5].map((i) => (
-          <Skeleton key={i} className="h-96 w-72 shrink-0" />
-        ))}
+      <div className="space-y-4">
+        {header}
+        <div className="flex gap-4">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <Skeleton key={i} className="h-96 w-72 shrink-0" />
+          ))}
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="flex gap-4 overflow-x-auto pb-4">
-      <KanbanProviders
-        columnIds={columns.map((c) => c.id)}
-        onDragEnd={handleDragEnd}
-        onDragOver={handleDragOver}
-      >
-        {columns.map((column) => (
-          <KanbanColumnComponent
-            key={column.id}
-            column={column}
-            onRename={(title) => updateColumn(column.id, { title })}
-            onDelete={() => {
-              if (column.cards.length > 0) {
-                const firstOther = columns.find((c) => c.id !== column.id)
-                deleteColumn(column.id, firstOther?.id)
-              } else {
-                deleteColumn(column.id)
-              }
-              toast.success("Column deleted")
-            }}
-            onRemoveCard={removeCardFromBoard}
-          />
-        ))}
-      </KanbanProviders>
-      <AddCompanyDialog columns={columns} onAdd={addCompanyToBoard} />
-      <AddColumnDialog onAdd={addColumn} />
+    <div className="space-y-4">
+      {header}
+      <div className="flex gap-4 overflow-x-auto pb-4">
+        <KanbanProviders
+          columnIds={columns.map((c) => c.id)}
+          onDragEnd={handleDragEnd}
+          onDragOver={handleDragOver}
+        >
+          {columns.map((column) => (
+            <KanbanColumnComponent
+              key={column.id}
+              column={column}
+              onRename={(title) => updateColumn(column.id, { title })}
+              onDelete={() => {
+                if (column.cards.length > 0) {
+                  const firstOther = columns.find((c) => c.id !== column.id)
+                  deleteColumn(column.id, firstOther?.id)
+                } else {
+                  deleteColumn(column.id)
+                }
+                toast.success("Column deleted")
+              }}
+              onRemoveCard={removeCardFromBoard}
+            />
+          ))}
+        </KanbanProviders>
+      </div>
     </div>
   )
 }
