@@ -33,6 +33,10 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# dumps do scripts/backup-tables.mjs — dados reais de milhares de pessoas,
+# e este repositório é PÚBLICO
+/backup
+
 # vercel
 .vercel
 
