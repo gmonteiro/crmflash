@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Users, Building2, Kanban, Upload } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { CopilotPanel } from "@/components/copilot/copilot-panel"
+import { CompanySearch } from "@/components/dashboard/company-search"
 import Link from "next/link"
 
 interface Stats {
@@ -63,7 +64,14 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Dashboard</h1>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-2xl font-bold">Dashboard</h1>
+        {/* Porta de entrada para uma conta específica: você já sabe o nome e
+            quer a situação dela sem passar por /companies. */}
+        <div className="w-full sm:max-w-sm">
+          <CompanySearch />
+        </div>
+      </div>
 
       {/* O copiloto vem primeiro: é o que você alimenta todo dia. */}
       <CopilotPanel onApplied={loadStats} />
