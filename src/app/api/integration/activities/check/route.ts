@@ -4,10 +4,11 @@ import { validateIntegrationAuth } from '@/lib/auth/integration'
 import { rateLimit, rateLimitKey } from '@/lib/rate-limit'
 
 export async function GET(request: NextRequest) {
-  const userId = validateIntegrationAuth(request)
-  if (!userId) {
+  const auth = await validateIntegrationAuth(request)
+  if (!auth) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+  const { userId, workspaceId } = auth
 
   const rl = rateLimit(rateLimitKey(request, 'integration-check'), { limit: 60, windowMs: 60_000 })
   if (!rl.success) {
@@ -29,7 +30,7 @@ export async function GET(request: NextRequest) {
   const { data } = await supabase
     .from('activities')
     .select('id, created_at')
-    .eq('user_id', userId)
+    .eq('workspace_id', workspaceId)
     .eq('source', 'transcription_app')
     .eq('source_meeting_id', meetingId)
     .limit(1)

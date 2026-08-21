@@ -5,10 +5,11 @@ import { integrationActivitySchema } from '@/lib/validators'
 import { rateLimit, rateLimitKey } from '@/lib/rate-limit'
 
 export async function POST(request: NextRequest) {
-  const userId = validateIntegrationAuth(request)
-  if (!userId) {
+  const auth = await validateIntegrationAuth(request)
+  if (!auth) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+  const { userId, workspaceId } = auth
 
   const rl = rateLimit(rateLimitKey(request, 'integration-activity'), { limit: 30, windowMs: 60_000 })
   if (!rl.success) {
@@ -49,7 +50,7 @@ export async function POST(request: NextRequest) {
       .from('people')
       .select('id')
       .eq('id', person_id)
-      .eq('user_id', userId)
+      .eq('workspace_id', workspaceId)
       .maybeSingle()
 
     if (!person) {
@@ -62,7 +63,7 @@ export async function POST(request: NextRequest) {
       .from('companies')
       .select('id')
       .eq('id', company_id)
-      .eq('user_id', userId)
+      .eq('workspace_id', workspaceId)
       .maybeSingle()
 
     if (!company) {
@@ -75,7 +76,7 @@ export async function POST(request: NextRequest) {
     let dedup = supabase
       .from('activities')
       .select('id, created_at')
-      .eq('user_id', userId)
+      .eq('workspace_id', workspaceId)
       .eq('source', 'transcription_app')
       .eq('source_meeting_id', source_meeting_id)
 
@@ -104,6 +105,7 @@ export async function POST(request: NextRequest) {
   const { data: activity, error } = await supabase
     .from('activities')
     .insert({
+      workspace_id: workspaceId,
       user_id: userId,
       person_id: person_id || null,
       company_id: company_id || null,
@@ -130,6 +132,7 @@ export async function POST(request: NextRequest) {
   let nextStepsCreated = 0
   if (summary?.action_items?.length > 0 && company_id) {
     const steps = summary.action_items.map((item: string) => ({
+      workspace_id: workspaceId,
       user_id: userId,
       company_id,
       title: item,

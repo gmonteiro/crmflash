@@ -4,10 +4,11 @@ import { validateIntegrationAuth } from '@/lib/auth/integration'
 import { rateLimit, rateLimitKey } from '@/lib/rate-limit'
 
 export async function GET(request: NextRequest) {
-  const userId = validateIntegrationAuth(request)
-  if (!userId) {
+  const auth = await validateIntegrationAuth(request)
+  if (!auth) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+  const { userId, workspaceId } = auth
 
   const rl = rateLimit(rateLimitKey(request, 'integration-search'), { limit: 60, windowMs: 60_000 })
   if (!rl.success) {
@@ -34,7 +35,7 @@ export async function GET(request: NextRequest) {
     const { data } = await supabase
       .from('people')
       .select('id, full_name, current_title, current_company')
-      .eq('user_id', userId)
+      .eq('workspace_id', workspaceId)
       .ilike('full_name', pattern)
       .limit(20)
 
@@ -45,7 +46,7 @@ export async function GET(request: NextRequest) {
     const { data } = await supabase
       .from('companies')
       .select('id, name, industry')
-      .eq('user_id', userId)
+      .eq('workspace_id', workspaceId)
       .ilike('name', pattern)
       .limit(20)
 

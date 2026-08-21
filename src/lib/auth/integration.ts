@@ -1,11 +1,21 @@
 import { NextRequest } from 'next/server'
 import { timingSafeEqual } from 'crypto'
+import { createClient } from '@supabase/supabase-js'
 
 /**
- * Validates the integration shared secret from the Authorization header.
- * Returns the configured user_id if valid, null otherwise.
+ * Valida o segredo compartilhado da integração.
+ * Devolve o usuário configurado e o workspace dele, ou null.
+ *
+ * O TranscriptionApp não muda: continua mandando o mesmo Bearer. O que muda é
+ * que o destino agora é um workspace, e o INTEGRATION_USER_ID passa a valer
+ * como autoria — quem "registrou" a atividade no CRM.
+ *
+ * Async porque resolve o workspace no banco. Estas rotas usam service role, e
+ * com service role auth.uid() é nulo: current_workspace() não serve aqui.
  */
-export function validateIntegrationAuth(request: NextRequest): string | null {
+export async function validateIntegrationAuth(
+  request: NextRequest
+): Promise<{ userId: string; workspaceId: string } | null> {
   const secret = process.env.INTEGRATION_SECRET
   const userId = process.env.INTEGRATION_USER_ID
 
@@ -22,5 +32,17 @@ export function validateIntegrationAuth(request: NextRequest): string | null {
   if (tokenBuf.length !== secretBuf.length || !timingSafeEqual(tokenBuf, secretBuf))
     return null
 
-  return userId
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+  const { data: member } = await supabase
+    .from('workspace_members')
+    .select('workspace_id')
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  if (!member) return null
+
+  return { userId, workspaceId: member.workspace_id }
 }

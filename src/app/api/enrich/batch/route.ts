@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server"
+import { getWorkspaceId } from "@/lib/workspace/server"
 import { getEnrichProvider } from "@/lib/enrich"
 import { verifyCsrfOrigin } from "@/lib/utils"
 import { rateLimit, rateLimitKey } from "@/lib/rate-limit"
@@ -52,6 +53,11 @@ export async function POST(request: Request) {
     return jsonResponse({ error: "Unauthorized" }, 401)
   }
 
+  const workspaceId = await getWorkspaceId(supabase, user.id)
+  if (!workspaceId) {
+    return jsonResponse({ error: "Sem workspace" }, 403)
+  }
+
   const encoder = new TextEncoder()
   const stream = new TransformStream()
   const writer = stream.writable.getWriter()
@@ -71,7 +77,7 @@ export async function POST(request: Request) {
         .from("companies")
         .select("id, name, domain, website, industry, description, employee_count, estimated_revenue, size_tier, linkedin_url")
         .in("id", companyIds)
-        .eq("user_id", user.id)
+        .eq("workspace_id", workspaceId)
 
       if (!companies || companies.length === 0) {
         await sendEvent({ type: "error", message: "No companies found" })
@@ -135,7 +141,7 @@ export async function POST(request: Request) {
           .from("companies")
           .update(update)
           .eq("id", id)
-          .eq("user_id", user!.id)
+          .eq("workspace_id", workspaceId)
 
         return !error
       }

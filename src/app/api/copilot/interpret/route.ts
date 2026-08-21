@@ -1,5 +1,6 @@
 import { differenceInCalendarDays, parseISO, format } from "date-fns"
 import { createServerSupabaseClient } from "@/lib/supabase/server"
+import { getWorkspaceId } from "@/lib/workspace/server"
 import { getCopilotProvider, hasCopilotApiKey } from "@/lib/copilot"
 import type { CopilotCompanyContext } from "@/lib/copilot"
 import { verifyCsrfOrigin } from "@/lib/utils"
@@ -40,6 +41,11 @@ export async function POST(request: Request) {
     return jsonResponse({ error: "Unauthorized", code: "unauthorized" }, 401)
   }
 
+  const workspaceId = await getWorkspaceId(supabase, user.id)
+  if (!workspaceId) {
+    return jsonResponse({ error: "Sem workspace", code: "unauthorized" }, 403)
+  }
+
   const parsed = copilotInterpretRequestSchema.safeParse(await request.json())
   if (!parsed.success) {
     return jsonResponse(
@@ -58,19 +64,19 @@ export async function POST(request: Request) {
         "id, name, kanban_column_id, last_client_event_at, champion_name, economic_buyer_name, pain_hypothesis"
       )
       .eq("id", companyId)
-      .eq("user_id", user.id)
+      .eq("workspace_id", workspaceId)
       .single(),
     supabase.from("kanban_columns").select("id, title, position").order("position"),
     supabase
       .from("company_commitment_signals")
       .select("signal_type")
       .eq("company_id", companyId)
-      .eq("user_id", user.id),
+      .eq("workspace_id", workspaceId),
     supabase
       .from("company_next_steps")
       .select("title, due_date")
       .eq("company_id", companyId)
-      .eq("user_id", user.id)
+      .eq("workspace_id", workspaceId)
       .eq("status", "pending")
       .order("due_date", { ascending: true, nullsFirst: false })
       .limit(10),
@@ -78,7 +84,7 @@ export async function POST(request: Request) {
       .from("company_activities")
       .select("date, type, title")
       .eq("company_id", companyId)
-      .eq("user_id", user.id)
+      .eq("workspace_id", workspaceId)
       .order("date", { ascending: false })
       .limit(5),
   ])

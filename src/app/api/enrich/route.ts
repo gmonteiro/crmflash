@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server"
+import { getWorkspaceId } from "@/lib/workspace/server"
 import { getEnrichProvider } from "@/lib/enrich"
 import { verifyCsrfOrigin } from "@/lib/utils"
 import { rateLimit, rateLimitKey } from "@/lib/rate-limit"
@@ -44,6 +45,11 @@ export async function POST(request: Request) {
     return jsonResponse({ error: "Unauthorized" }, 401)
   }
 
+  const workspaceId = await getWorkspaceId(supabase, user.id)
+  if (!workspaceId) {
+    return jsonResponse({ error: "Sem workspace" }, 403)
+  }
+
   if (type !== "person" && type !== "company") {
     return jsonResponse({ error: "Invalid type. Use 'person' or 'company'" }, 400)
   }
@@ -70,7 +76,7 @@ export async function POST(request: Request) {
           .from("people")
           .select("id, first_name, last_name, full_name, email, current_title, current_company, company_id, linkedin_url")
           .eq("id", personId)
-          .eq("user_id", user.id)
+          .eq("workspace_id", workspaceId)
           .single()
 
         if (!person) {
@@ -105,7 +111,7 @@ export async function POST(request: Request) {
           const { data: existingCompany } = await supabase
             .from("companies")
             .select("id")
-            .eq("user_id", user.id)
+            .eq("workspace_id", workspaceId)
             .ilike("name", enriched.current_company)
             .limit(1)
 
@@ -114,7 +120,7 @@ export async function POST(request: Request) {
           } else {
             const { data: newCompany } = await supabase
               .from("companies")
-              .insert({ name: enriched.current_company, user_id: user.id })
+              .insert({ name: enriched.current_company, workspace_id: workspaceId, user_id: user.id })
               .select("id")
               .single()
 
@@ -126,7 +132,7 @@ export async function POST(request: Request) {
           .from("people")
           .update(update)
           .eq("id", personId)
-          .eq("user_id", user.id)
+          .eq("workspace_id", workspaceId)
 
         if (error) {
           await sendEvent({ type: "error", message: "Failed to update person" })
@@ -140,7 +146,7 @@ export async function POST(request: Request) {
           .from("companies")
           .select("id, name, domain, website, industry, description, employee_count, estimated_revenue, size_tier, linkedin_url")
           .eq("id", companyId)
-          .eq("user_id", user.id)
+          .eq("workspace_id", workspaceId)
           .single()
 
         if (!company) {
@@ -189,7 +195,7 @@ export async function POST(request: Request) {
             .from("companies")
             .update(update)
             .eq("id", companyId)
-            .eq("user_id", user.id)
+            .eq("workspace_id", workspaceId)
 
           if (error) {
             await sendEvent({ type: "error", message: "Failed to update company" })
