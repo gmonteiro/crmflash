@@ -7,19 +7,13 @@ import { Badge } from "@/components/ui/badge"
 import { GripVertical, X, User, Zap, CalendarClock, AlertTriangle } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
-import { STALE_DAYS, FROZEN_DAYS } from "@/lib/constants"
-import { differenceInCalendarDays, parseISO, format } from "date-fns"
+import { clientEventStatus } from "@/lib/pipeline/health"
+import { parseISO, format } from "date-fns"
 
 interface KanbanCardProps {
   company: KanbanCardCompany
   overlay?: boolean
   onRemove?: (id: string) => void
-}
-
-// Dias desde o último evento DO CLIENTE (null = nunca).
-function daysSince(iso: string | null | undefined): number | null {
-  if (!iso) return null
-  return differenceInCalendarDays(new Date(), parseISO(iso))
 }
 
 export function KanbanCard({ company, overlay, onRemove }: KanbanCardProps) {
@@ -40,21 +34,9 @@ export function KanbanCard({ company, overlay, onRemove }: KanbanCardProps) {
     transition,
   }
 
-  const days = daysSince(company.last_client_event_at)
-  // Card parado: sem evento do cliente há muito tempo, OU nunca teve, OU sem próximo passo agendado.
-  const isFrozen = days === null || days >= FROZEN_DAYS
-  const isStale = days !== null && days >= STALE_DAYS && days < FROZEN_DAYS
-  const noNextStep = !company.nextStepDue
+  // Mesma regra de "conta parada" do dashboard e do copiloto (health.ts).
+  const event = clientEventStatus(company.last_client_event_at)
   const signalCount = company.signalCount ?? 0
-
-  const eventColor = isFrozen
-    ? "text-red-600 dark:text-red-400"
-    : isStale
-      ? "text-amber-600 dark:text-amber-400"
-      : "text-emerald-600 dark:text-emerald-400"
-
-  const eventLabel =
-    days === null ? "sem evento" : days === 0 ? "hoje" : `há ${days}d`
 
   return (
     <div
@@ -62,9 +44,9 @@ export function KanbanCard({ company, overlay, onRemove }: KanbanCardProps) {
       style={!overlay ? style : undefined}
       className={cn(
         "group overflow-hidden rounded-md border border-l-2 bg-card p-2 shadow-sm",
-        isFrozen && "border-l-red-500",
-        isStale && "border-l-amber-500",
-        !isFrozen && !isStale && "border-l-emerald-500",
+        event.health === "frozen" && "border-l-red-500",
+        event.health === "stale" && "border-l-amber-500",
+        event.health === "fresh" && "border-l-emerald-500",
         isDragging && "opacity-30",
         overlay && "rotate-2 shadow-lg"
       )}
@@ -122,9 +104,9 @@ export function KanbanCard({ company, overlay, onRemove }: KanbanCardProps) {
           </div>
 
           <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px]">
-            <span className={cn("flex items-center gap-0.5 font-medium", eventColor)}>
+            <span className={cn("flex items-center gap-0.5 font-medium", event.colorClass)}>
               <span className="h-1.5 w-1.5 rounded-full bg-current" />
-              {eventLabel}
+              {event.label}
             </span>
             {signalCount > 0 && (
               <span className="flex items-center gap-0.5 text-violet-600 dark:text-violet-400 font-medium">
