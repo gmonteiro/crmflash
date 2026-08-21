@@ -92,10 +92,11 @@ try {
   console.log("\n== outsider (sem workspace) NÃO deve ler nada ==")
   for (const table of TABLES) {
     const { rows, error } = await count(outsider.token, table)
+    const blocked = error !== undefined || rows === 0
     check(
       `outsider bloqueado em ${table}`,
-      error !== undefined || rows === 0,
-      error ?? `${rows} linhas VAZARAM`
+      blocked,
+      error ?? (blocked ? "0 linhas" : `${rows} linhas VAZARAM`)
     )
   }
 
