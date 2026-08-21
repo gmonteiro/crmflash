@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useCompanyNextSteps } from "@/hooks/use-company-next-steps"
+import { useMemberEmails } from "@/hooks/use-workspace-members"
 import { NextStepFormDialog } from "./next-step-form-dialog"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -14,8 +15,21 @@ interface CompanyNextStepsTabProps {
   companyId: string
 }
 
+
+// Nome curto do autor. Vazio quando o workspace tem uma pessoa só: ali "quem
+// fez" é sempre "eu", e a informação vira ruído.
+function authorLabel(
+  userId: string | null,
+  emails: Record<string, string>
+): string | null {
+  if (!userId || Object.keys(emails).length < 2) return null
+  const email = emails[userId]
+  return email ? email.split("@")[0] : null
+}
+
 export function CompanyNextStepsTab({ companyId }: CompanyNextStepsTabProps) {
   const { pending, completed, loading, createStep, toggleComplete, deleteStep } = useCompanyNextSteps(companyId)
+  const emails = useMemberEmails()
   const [dialogOpen, setDialogOpen] = useState(false)
 
   if (loading) {
@@ -72,6 +86,11 @@ export function CompanyNextStepsTab({ companyId }: CompanyNextStepsTabProps) {
                 <p className="text-sm font-medium">{step.title}</p>
                 {step.description && (
                   <p className="text-xs text-muted-foreground mt-0.5">{step.description}</p>
+                )}
+                {authorLabel(step.user_id, emails) && (
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    de {authorLabel(step.user_id, emails)}
+                  </p>
                 )}
                 {step.due_date && (
                   <div className="flex items-center gap-2 mt-1">

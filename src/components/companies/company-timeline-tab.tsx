@@ -11,6 +11,19 @@ import { Plus, Trash2, MessageSquare, Phone, Mail, StickyNote, FileText, ListChe
 import { format, parseISO } from "date-fns"
 import { ACTIVITY_TYPES } from "@/lib/constants"
 import type { ActivityType } from "@/types/database"
+import { useMemberEmails } from "@/hooks/use-workspace-members"
+
+// Nome curto do autor. Vazio quando o workspace tem uma pessoa só: ali "quem
+// fez" é sempre "eu", e a informação vira ruído.
+function authorLabel(
+  userId: string | null,
+  emails: Record<string, string>
+): string | null {
+  if (!userId || Object.keys(emails).length < 2) return null
+  const email = emails[userId]
+  return email ? email.split("@")[0] : null
+}
+
 
 const ACTIVITY_ICONS: Record<string, React.ElementType> = {
   meeting: MessageSquare,
@@ -27,6 +40,7 @@ interface CompanyTimelineTabProps {
 
 export function CompanyTimelineTab({ companyId }: CompanyTimelineTabProps) {
   const { activities, loading, createActivity, deleteActivity } = useCompanyActivities(companyId)
+  const emails = useMemberEmails()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [quickNote, setQuickNote] = useState("")
   const [savingNote, setSavingNote] = useState(false)
@@ -126,6 +140,11 @@ export function CompanyTimelineTab({ companyId }: CompanyTimelineTabProps) {
                           <span className="text-xs text-muted-foreground">
                             {format(parseISO(activity.date), "MMM d, yyyy 'at' h:mm a")}
                           </span>
+                          {authorLabel(activity.user_id, emails) && (
+                            <span className="text-xs text-muted-foreground">
+                              · {authorLabel(activity.user_id, emails)}
+                            </span>
+                          )}
                         </div>
                         <p className="text-sm font-medium mt-0.5">{activity.title}</p>
                         {activity.description && (
