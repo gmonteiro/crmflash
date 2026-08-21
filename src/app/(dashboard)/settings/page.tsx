@@ -9,6 +9,7 @@ import { useTheme } from "next-themes"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "sonner"
 import { Sparkles, Palette, Key } from "lucide-react"
+import { WorkspaceCard } from "@/components/settings/workspace-card"
 
 type KeyStatus = Record<"openai" | "anthropic" | "perplexity" | "exa", boolean>
 
@@ -50,6 +51,8 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6 max-w-2xl">
+      <WorkspaceCard />
+
       <h1 className="text-2xl font-bold">Settings</h1>
 
       <Card>
