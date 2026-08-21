@@ -2,18 +2,16 @@
 
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { WorkspaceProvider, useWorkspace } from "@/lib/workspace/context"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Topbar } from "@/components/layout/topbar"
 import { cn } from "@/lib/utils"
 
-export default function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+function DashboardShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [email, setEmail] = useState<string | undefined>()
+  const { workspaceId, loading } = useWorkspace()
 
   useEffect(() => {
     async function init() {
@@ -21,20 +19,23 @@ export default function DashboardLayout({
       const { data: { user } } = await supabase.auth.getUser()
       setEmail(user?.email ?? undefined)
 
-      if (user) {
-        const { data: cols } = await supabase
-          .from("kanban_columns")
-          .select("id")
-          .eq("user_id", user.id)
-          .limit(1)
+      if (loading || !workspaceId) return
 
-        if (!cols || cols.length === 0) {
-          await supabase.rpc("create_default_kanban_columns", { p_user_id: user.id })
-        }
+      // O bootstrap é por WORKSPACE, não por usuário: se fosse por usuário, a
+      // segunda pessoa a logar criaria um segundo conjunto de 10 colunas em
+      // cima do quadro que já existe.
+      const { data: cols } = await supabase
+        .from("kanban_columns")
+        .select("id")
+        .eq("workspace_id", workspaceId)
+        .limit(1)
+
+      if (!cols || cols.length === 0) {
+        await supabase.rpc("create_default_kanban_columns", { p_workspace_id: workspaceId })
       }
     }
     init()
-  }, [])
+  }, [workspaceId, loading])
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -69,5 +70,17 @@ export default function DashboardLayout({
         </main>
       </div>
     </div>
+  )
+}
+
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return (
+    <WorkspaceProvider>
+      <DashboardShell>{children}</DashboardShell>
+    </WorkspaceProvider>
   )
 }

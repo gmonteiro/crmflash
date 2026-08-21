@@ -4,7 +4,8 @@ export type ImportStatus = 'pending' | 'processing' | 'completed' | 'failed'
 
 export interface Company {
   id: string
-  user_id: string
+  workspace_id: string
+  user_id: string | null // quem criou; o escopo e workspace_id
   name: string
   domain: string | null
   linkedin_url: string | null
@@ -37,7 +38,8 @@ export type CommitmentSignalType =
 
 export interface CommitmentSignal {
   id: string
-  user_id: string
+  workspace_id: string
+  user_id: string | null // quem criou; o escopo e workspace_id
   company_id: string
   signal_type: CommitmentSignalType
   captured_at: string
@@ -48,7 +50,8 @@ export type StageEventDirection = 'enter' | 'advance' | 'retreat' | 'frozen'
 
 export interface CompanyStageEvent {
   id: string
-  user_id: string
+  workspace_id: string
+  user_id: string | null // quem criou; o escopo e workspace_id
   company_id: string
   from_column_id: string | null
   to_column_id: string | null
@@ -63,7 +66,8 @@ export interface CompanyStageEvent {
 
 export interface Person {
   id: string
-  user_id: string
+  workspace_id: string
+  user_id: string | null // quem criou; o escopo e workspace_id
   first_name: string
   last_name: string
   full_name: string
@@ -89,7 +93,8 @@ export interface Person {
 
 export interface KanbanColumn {
   id: string
-  user_id: string
+  workspace_id: string
+  user_id: string | null // quem criou; o escopo e workspace_id
   title: string
   color: string
   position: number
@@ -99,7 +104,8 @@ export interface KanbanColumn {
 
 export interface ImportHistory {
   id: string
-  user_id: string
+  workspace_id: string
+  user_id: string | null // quem criou; o escopo e workspace_id
   filename: string
   file_type: 'csv' | 'xlsx'
   row_count: number
@@ -114,7 +120,8 @@ export interface ImportHistory {
 
 export interface Tag {
   id: string
-  user_id: string
+  workspace_id: string
+  user_id: string | null // quem criou; o escopo e workspace_id
   name: string
   color: string | null
   created_at: string
@@ -131,7 +138,8 @@ export type NextStepStatus = 'pending' | 'completed'
 
 export interface CompanyDocument {
   id: string
-  user_id: string
+  workspace_id: string
+  user_id: string | null // quem criou; o escopo e workspace_id
   company_id: string
   name: string
   file_path: string
@@ -145,7 +153,8 @@ export interface CompanyDocument {
 
 export interface CompanyActivity {
   id: string
-  user_id: string
+  workspace_id: string
+  user_id: string | null // quem criou; o escopo e workspace_id
   company_id: string
   type: ActivityType
   title: string
@@ -158,7 +167,8 @@ export type ActivitySource = 'manual' | 'transcription_app'
 
 export interface Activity {
   id: string
-  user_id: string
+  workspace_id: string
+  user_id: string | null // quem criou; o escopo e workspace_id
   person_id: string | null
   company_id: string | null
   type: 'meeting' | 'call' | 'email' | 'note'
@@ -193,7 +203,8 @@ export type ShortlistEntityType = 'person' | 'company'
 
 export interface Shortlist {
   id: string
-  user_id: string
+  workspace_id: string
+  user_id: string | null // quem criou; o escopo e workspace_id
   entity_type: ShortlistEntityType
   name: string
   description: string | null
@@ -215,7 +226,8 @@ export interface ShortlistMember {
 
 export interface CompanyNextStep {
   id: string
-  user_id: string
+  workspace_id: string
+  user_id: string | null // quem criou; o escopo e workspace_id
   company_id: string
   title: string
   description: string | null
@@ -234,7 +246,8 @@ export type CopilotEventStatus = 'answered' | 'snoozed' | 'dismissed'
 
 export interface CopilotQuestionEvent {
   id: string
-  user_id: string
+  workspace_id: string
+  user_id: string | null // quem criou; o escopo e workspace_id
   company_id: string
   question_key: string
   rule_id: string
@@ -243,5 +256,34 @@ export interface CopilotQuestionEvent {
   answer_text: string | null
   applied: Record<string, unknown> | null
   suppress_until: string
+  created_at: string
+}
+
+// ---------------------------------------------------------------------------
+// Workspaces (migration 010)
+// ---------------------------------------------------------------------------
+
+export interface Workspace {
+  id: string
+  name: string
+  created_by: string
+  created_at: string
+}
+
+export interface WorkspaceMember {
+  id: string
+  workspace_id: string
+  user_id: string
+  joined_at: string
+}
+
+export type InvitationStatus = 'pending' | 'accepted' | 'declined'
+
+export interface WorkspaceInvitation {
+  id: string
+  workspace_id: string
+  invited_email: string
+  invited_by: string
+  status: InvitationStatus
   created_at: string
 }
