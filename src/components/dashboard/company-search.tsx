@@ -7,6 +7,7 @@ import { Building2, CalendarClock, Loader2, Search, User, Zap, AlertTriangle } f
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { createClient } from "@/lib/supabase/client"
+import { useWorkspace } from "@/lib/workspace/context"
 import { clientEventStatus } from "@/lib/pipeline/health"
 import { toIlikePattern } from "@/lib/search-term"
 import { cn } from "@/lib/utils"
@@ -66,6 +67,10 @@ function toHit(row: Row): CompanyHit {
 
 export function CompanySearch() {
   const router = useRouter()
+  // Escopo explicito por workspace, como o resto do app: a RLS sozinha deixaria
+  // a busca enxergar contas de todos os workspaces do usuario enquanto as outras
+  // telas mostram so o ativo.
+  const { workspaceId } = useWorkspace()
   const [term, setTerm] = useState("")
   const [results, setResults] = useState<CompanyHit[]>([])
   const [loading, setLoading] = useState(false)
@@ -91,7 +96,7 @@ export function CompanySearch() {
 
   useEffect(() => {
     const pattern = toIlikePattern(term)
-    if (pattern.length < MIN_CHARS + 2) return
+    if (pattern.length < MIN_CHARS + 2 || !workspaceId) return
 
     const id = ++requestId.current
     const timer = setTimeout(async () => {
@@ -104,6 +109,7 @@ export function CompanySearch() {
         .select(
           "id, name, kanban_column_id, last_client_event_at, champion_name, kanban_columns(title), company_next_steps(title, due_date, status), company_commitment_signals(signal_type)"
         )
+        .eq("workspace_id", workspaceId)
         .ilike("name", pattern)
         .eq("company_next_steps.status", "pending")
         .order("name")
@@ -116,7 +122,7 @@ export function CompanySearch() {
     }, DEBOUNCE_MS)
 
     return () => clearTimeout(timer)
-  }, [term])
+  }, [term, workspaceId])
 
   const openCompany = useCallback(
     (hit: CompanyHit | undefined) => {
