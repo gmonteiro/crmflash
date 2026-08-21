@@ -100,6 +100,31 @@ try {
     )
   }
 
+  // Escrever exige EXECUTE em default_workspace(), que e o DEFAULT da coluna
+  // workspace_id. Um revoke mal feito nessa funcao quebra todo insert do app
+  // sem quebrar nenhuma leitura — por isso este teste existe separado.
+  console.log("\n== insider deve conseguir ESCREVER ==")
+  const insert = await fetch(`${URL}/rest/v1/companies`, {
+    method: "POST",
+    headers: {
+      apikey: ANON,
+      Authorization: `Bearer ${insider.token}`,
+      "Content-Type": "application/json",
+      Prefer: "return=representation",
+    },
+    body: JSON.stringify({ name: `__rls-probe-${suffix}` }),
+  })
+  const created = insert.ok ? (await insert.json())[0] : null
+  check("insider insere company", insert.ok, `HTTP ${insert.status}`)
+  check(
+    "workspace_id preenchido pelo DEFAULT",
+    created?.workspace_id === ws.id,
+    created ? `workspace_id=${created.workspace_id}` : "sem linha"
+  )
+  if (created) {
+    await admin(`/rest/v1/companies?id=eq.${created.id}`, { method: "DELETE" })
+  }
+
   console.log("\n== outsider não deve conseguir escrever ==")
   const write = await fetch(`${URL}/rest/v1/companies`, {
     method: "POST",
