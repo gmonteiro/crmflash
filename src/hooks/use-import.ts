@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { useWorkspace } from "@/lib/workspace/context"
 import { parseCsv, type ParseResult } from "@/lib/import/parse-csv"
 import { parseXlsx } from "@/lib/import/parse-xlsx"
 import { autoMapColumns } from "@/lib/import/map-columns"
@@ -10,6 +11,7 @@ import { validateRow, type RowValidation } from "@/lib/import/validate-row"
 export type ImportStep = "upload" | "mapping" | "validating" | "preview" | "executing" | "done"
 
 export function useImport() {
+  const { workspaceId } = useWorkspace()
   const [step, setStep] = useState<ImportStep>("upload")
   const [file, setFile] = useState<File | null>(null)
   const [parseResult, setParseResult] = useState<ParseResult | null>(null)
@@ -76,12 +78,13 @@ export function useImport() {
     setStep("executing")
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    if (!user || !workspaceId) return
 
     // Create import history record
     const { data: importRecord } = await supabase
       .from("import_history")
       .insert({
+        workspace_id: workspaceId,
         user_id: user.id,
         filename: file.name,
         file_type: file.name.endsWith(".xlsx") || file.name.endsWith(".xls") ? "xlsx" : "csv",
@@ -104,7 +107,7 @@ export function useImport() {
     const { data: allPeople } = await supabase
       .from("people")
       .select("first_name, last_name, current_title, current_company")
-      .eq("user_id", user.id)
+      .eq("workspace_id", workspaceId)
       .limit(50000)
 
     if (allPeople) {
@@ -141,7 +144,7 @@ export function useImport() {
     const { data: allCompanies } = await supabase
       .from("companies")
       .select("id, name")
-      .eq("user_id", user.id)
+      .eq("workspace_id", workspaceId)
       .limit(50000)
 
     if (allCompanies) {
@@ -168,7 +171,7 @@ export function useImport() {
         const chunk = missingNames.slice(i, i + insertChunkSize)
         const { data: created } = await supabase
           .from("companies")
-          .insert(chunk.map((name) => ({ name, user_id: user.id })))
+          .insert(chunk.map((name) => ({ name, workspace_id: workspaceId, user_id: user.id })))
           .select("id, name")
 
         if (created) {
@@ -192,6 +195,7 @@ export function useImport() {
           : null
 
         return {
+          workspace_id: workspaceId,
           user_id: user.id,
           first_name: data.first_name || "Unknown",
           last_name: data.last_name || "",

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { useWorkspace } from "@/lib/workspace/context"
 import type { Shortlist, ShortlistMember, ShortlistEntityType } from "@/types/database"
 
 export function useShortlistMemberships(entityType: ShortlistEntityType) {
@@ -37,6 +38,7 @@ export function useShortlistMemberships(entityType: ShortlistEntityType) {
 }
 
 export function useShortlists(entityType: ShortlistEntityType) {
+  const { workspaceId } = useWorkspace()
   const [shortlists, setShortlists] = useState<Shortlist[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -67,11 +69,11 @@ export function useShortlists(entityType: ShortlistEntityType) {
   const createShortlist = useCallback(async (name: string, description?: string) => {
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return null
+    if (!user || !workspaceId) return null
 
     const { data, error } = await supabase
       .from("shortlists")
-      .insert({ name, description: description || null, entity_type: entityType, user_id: user.id })
+      .insert({ name, description: description || null, entity_type: entityType, workspace_id: workspaceId, user_id: user.id })
       .select()
       .single()
 
@@ -81,12 +83,12 @@ export function useShortlists(entityType: ShortlistEntityType) {
       return newShortlist
     }
     return null
-  }, [entityType])
+  }, [workspaceId, entityType])
 
   const updateShortlist = useCallback(async (id: string, updates: { name?: string; description?: string }) => {
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return false
+    if (!user || !workspaceId) return false
 
     // Optimistic
     setShortlists((prev) => prev.map((s) => (s.id === id ? { ...s, ...updates } : s)))
@@ -95,19 +97,19 @@ export function useShortlists(entityType: ShortlistEntityType) {
       .from("shortlists")
       .update(updates)
       .eq("id", id)
-      .eq("user_id", user.id)
+      .eq("workspace_id", workspaceId)
 
     if (error) {
       fetchShortlists()
       return false
     }
     return true
-  }, [fetchShortlists])
+  }, [workspaceId, fetchShortlists])
 
   const deleteShortlist = useCallback(async (id: string) => {
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return false
+    if (!user || !workspaceId) return false
 
     setShortlists((prev) => prev.filter((s) => s.id !== id))
 
@@ -115,14 +117,14 @@ export function useShortlists(entityType: ShortlistEntityType) {
       .from("shortlists")
       .delete()
       .eq("id", id)
-      .eq("user_id", user.id)
+      .eq("workspace_id", workspaceId)
 
     if (error) {
       fetchShortlists()
       return false
     }
     return true
-  }, [fetchShortlists])
+  }, [workspaceId, fetchShortlists])
 
   const addMembers = useCallback(async (shortlistId: string, entityIds: string[]) => {
     const supabase = createClient()

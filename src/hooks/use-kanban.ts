@@ -2,12 +2,14 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { useWorkspace } from "@/lib/workspace/context"
 import type { KanbanColumn, Company } from "@/types/database"
 import type { KanbanColumnWithCards, KanbanCardCompany } from "@/types/kanban"
 import { calculatePosition } from "@/lib/kanban/position"
 import { applyStageMove } from "@/lib/pipeline/move"
 
 export function useKanban() {
+  const { workspaceId } = useWorkspace()
   const [columns, setColumns] = useState<KanbanColumnWithCards[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -118,12 +120,13 @@ export function useKanban() {
 
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
+    if (!user || !workspaceId) {
       fetchBoard()
       return
     }
 
     await applyStageMove(supabase, {
+      workspaceId,
       userId: user.id,
       companyId,
       from: fromCol
@@ -162,13 +165,14 @@ export function useKanban() {
   async function addColumn(title: string, color: string) {
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    if (!user || !workspaceId) return
 
     const maxPos = columns.length > 0 ? Math.max(...columns.map((c) => c.position)) : 0
 
     const { data, error } = await supabase
       .from("kanban_columns")
       .insert({
+        workspace_id: workspaceId,
         user_id: user.id,
         title,
         color,

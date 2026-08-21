@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { useWorkspace } from "@/lib/workspace/context"
 import type { CommitmentSignal, CommitmentSignalType } from "@/types/database"
 
 interface PipelineState {
@@ -13,6 +14,7 @@ interface PipelineState {
 }
 
 export function useCompanyPipeline(companyId: string) {
+  const { workspaceId } = useWorkspace()
   const [pipeline, setPipeline] = useState<PipelineState | null>(null)
   const [signals, setSignals] = useState<CommitmentSignal[]>([])
   const [loading, setLoading] = useState(true)
@@ -76,11 +78,11 @@ export function useCompanyPipeline(companyId: string) {
         .from("companies")
         .update({ [field]: next })
         .eq("id", companyId)
-        .eq("user_id", user.id)
+        .eq("workspace_id", workspaceId)
 
       if (error) fetchPipeline()
     },
-    [companyId, fetchPipeline]
+    [workspaceId, companyId, fetchPipeline]
   )
 
   // Marca "evento do cliente hoje" (reseta o contador de card parado).
@@ -96,10 +98,10 @@ export function useCompanyPipeline(companyId: string) {
       .from("companies")
       .update({ last_client_event_at: now })
       .eq("id", companyId)
-      .eq("user_id", user.id)
+      .eq("workspace_id", workspaceId)
 
     if (error) fetchPipeline()
-  }, [companyId, fetchPipeline])
+  }, [workspaceId, companyId, fetchPipeline])
 
   const hasSignal = useCallback(
     (type: CommitmentSignalType) => signals.some((s) => s.signal_type === type),
@@ -111,7 +113,7 @@ export function useCompanyPipeline(companyId: string) {
     async (type: CommitmentSignalType, label: string) => {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      if (!user || !workspaceId) return
 
       const existing = signals.find((s) => s.signal_type === type)
 
@@ -121,7 +123,7 @@ export function useCompanyPipeline(companyId: string) {
           .from("company_commitment_signals")
           .delete()
           .eq("id", existing.id)
-          .eq("user_id", user.id)
+          .eq("workspace_id", workspaceId)
         if (error) fetchPipeline()
         return
       }
@@ -130,6 +132,7 @@ export function useCompanyPipeline(companyId: string) {
       const { data: inserted, error } = await supabase
         .from("company_commitment_signals")
         .insert({
+          workspace_id: workspaceId,
           user_id: user.id,
           company_id: companyId,
           signal_type: type,
@@ -147,11 +150,12 @@ export function useCompanyPipeline(companyId: string) {
         .from("companies")
         .update({ last_client_event_at: now })
         .eq("id", companyId)
-        .eq("user_id", user.id)
+        .eq("workspace_id", workspaceId)
       setPipeline((prev) => (prev ? { ...prev, last_client_event_at: now } : prev))
 
       // Registra no timeline da empresa.
       await supabase.from("company_activities").insert({
+        workspace_id: workspaceId,
         user_id: user.id,
         company_id: companyId,
         type: "note",
@@ -159,7 +163,7 @@ export function useCompanyPipeline(companyId: string) {
         date: now,
       })
     },
-    [companyId, signals, fetchPipeline]
+    [workspaceId, companyId, signals, fetchPipeline]
   )
 
   return {

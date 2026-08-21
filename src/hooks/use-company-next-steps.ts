@@ -2,9 +2,11 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { useWorkspace } from "@/lib/workspace/context"
 import type { CompanyNextStep } from "@/types/database"
 
 export function useCompanyNextSteps(companyId: string) {
+  const { workspaceId } = useWorkspace()
   const [steps, setSteps] = useState<CompanyNextStep[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -29,11 +31,11 @@ export function useCompanyNextSteps(companyId: string) {
   const createStep = useCallback(async (data: { title: string; description?: string; due_date?: string }) => {
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return null
+    if (!user || !workspaceId) return null
 
     const { data: step, error } = await supabase
       .from("company_next_steps")
-      .insert({ ...data, company_id: companyId, user_id: user.id })
+      .insert({ ...data, company_id: companyId, workspace_id: workspaceId, user_id: user.id })
       .select()
       .single()
 
@@ -43,6 +45,7 @@ export function useCompanyNextSteps(companyId: string) {
 
     // Auto-create timeline activity
     await supabase.from("company_activities").insert({
+      workspace_id: workspaceId,
       user_id: user.id,
       company_id: companyId,
       type: "next_step_created",
@@ -51,7 +54,7 @@ export function useCompanyNextSteps(companyId: string) {
     })
 
     return step
-  }, [companyId])
+  }, [workspaceId, companyId])
 
   const toggleComplete = useCallback(async (id: string) => {
     const existing = steps.find((s) => s.id === id)
@@ -72,14 +75,14 @@ export function useCompanyNextSteps(companyId: string) {
       .from("company_next_steps")
       .update({ status: newStatus, completed_at: completedAt })
       .eq("id", id)
-      .eq("user_id", user.id)
+      .eq("workspace_id", workspaceId)
 
     if (error) {
       fetchSteps()
       return false
     }
     return true
-  }, [steps, fetchSteps])
+  }, [workspaceId, steps, fetchSteps])
 
   const deleteStep = useCallback(async (id: string) => {
     setSteps((prev) => prev.filter((s) => s.id !== id))
@@ -92,14 +95,14 @@ export function useCompanyNextSteps(companyId: string) {
       .from("company_next_steps")
       .delete()
       .eq("id", id)
-      .eq("user_id", user.id)
+      .eq("workspace_id", workspaceId)
 
     if (error) {
       fetchSteps()
       return false
     }
     return true
-  }, [fetchSteps])
+  }, [workspaceId, fetchSteps])
 
   const pending = steps.filter((s) => s.status === "pending")
   const completed = steps.filter((s) => s.status === "completed")

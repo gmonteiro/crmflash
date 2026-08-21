@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { useWorkspace } from "@/lib/workspace/context"
 import type { Company } from "@/types/database"
 
 interface UseCompaniesOptions {
@@ -15,6 +16,7 @@ interface UseCompaniesOptions {
 
 export function useCompanies(options: UseCompaniesOptions = {}) {
   const { search, industry, page = 0, pageSize = 25, sortBy, sortDirection } = options
+  const { workspaceId } = useWorkspace()
   const [companies, setCompanies] = useState<Company[]>([])
   const [totalCount, setTotalCount] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -56,11 +58,11 @@ export function useCompanies(options: UseCompaniesOptions = {}) {
   async function createCompany(data: Partial<Company>) {
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return null
+    if (!user || !workspaceId) return null
 
     const { data: company, error } = await supabase
       .from("companies")
-      .insert({ ...data, user_id: user.id })
+      .insert({ ...data, workspace_id: workspaceId, user_id: user.id })
       .select()
       .single()
 
@@ -75,7 +77,7 @@ export function useCompanies(options: UseCompaniesOptions = {}) {
   async function updateCompany(id: string, data: Partial<Company>) {
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return false
+    if (!user || !workspaceId) return false
 
     setCompanies((prev) =>
       prev.map((c) => (c.id === id ? { ...c, ...data } : c))
@@ -85,7 +87,7 @@ export function useCompanies(options: UseCompaniesOptions = {}) {
       .from("companies")
       .update(data)
       .eq("id", id)
-      .eq("user_id", user.id)
+      .eq("workspace_id", workspaceId)
 
     if (error) {
       fetchCompanies()
@@ -97,7 +99,7 @@ export function useCompanies(options: UseCompaniesOptions = {}) {
   async function deleteCompany(id: string) {
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return false
+    if (!user || !workspaceId) return false
 
     setCompanies((prev) => prev.filter((c) => c.id !== id))
     setTotalCount((prev) => prev - 1)
@@ -106,7 +108,7 @@ export function useCompanies(options: UseCompaniesOptions = {}) {
       .from("companies")
       .delete()
       .eq("id", id)
-      .eq("user_id", user.id)
+      .eq("workspace_id", workspaceId)
 
     if (error) {
       fetchCompanies()

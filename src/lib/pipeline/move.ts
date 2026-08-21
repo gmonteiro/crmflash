@@ -8,7 +8,9 @@ export interface MoveStageColumn {
 }
 
 interface ApplyStageMoveParams {
-  userId: string
+  // workspaceId escopa; userId diz quem moveu o card.
+  workspaceId: string
+  userId: string | null
   companyId: string
   from: MoveStageColumn | null
   to: MoveStageColumn
@@ -33,7 +35,7 @@ export function inferDirection(
 // Quando a empresa já está na coluna de destino, apenas reposiciona (sem log).
 export async function applyStageMove(
   supabase: SupabaseClient,
-  { userId, companyId, from, to, position }: ApplyStageMoveParams
+  { workspaceId, userId, companyId, from, to, position }: ApplyStageMoveParams
 ): Promise<StageEventDirection | null> {
   const changedColumn = !from || from.id !== to.id
   const direction = changedColumn ? inferDirection(from, to) : null
@@ -51,10 +53,11 @@ export async function applyStageMove(
     .from("companies")
     .update(companyUpdate)
     .eq("id", companyId)
-    .eq("user_id", userId)
+    .eq("workspace_id", workspaceId)
 
   if (direction) {
     await supabase.from("company_stage_events").insert({
+      workspace_id: workspaceId,
       user_id: userId,
       company_id: companyId,
       from_column_id: from?.id ?? null,

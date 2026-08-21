@@ -2,9 +2,11 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { useWorkspace } from "@/lib/workspace/context"
 import type { CompanyActivity } from "@/types/database"
 
 export function useCompanyActivities(companyId: string) {
+  const { workspaceId } = useWorkspace()
   const [activities, setActivities] = useState<CompanyActivity[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -34,11 +36,11 @@ export function useCompanyActivities(companyId: string) {
   }) => {
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return null
+    if (!user || !workspaceId) return null
 
     const { data: activity, error } = await supabase
       .from("company_activities")
-      .insert({ ...data, company_id: companyId, user_id: user.id })
+      .insert({ ...data, company_id: companyId, workspace_id: workspaceId, user_id: user.id })
       .select()
       .single()
 
@@ -46,7 +48,7 @@ export function useCompanyActivities(companyId: string) {
 
     setActivities((prev) => [activity, ...prev])
     return activity
-  }, [companyId])
+  }, [workspaceId, companyId])
 
   const deleteActivity = useCallback(async (id: string) => {
     setActivities((prev) => prev.filter((a) => a.id !== id))
@@ -59,14 +61,14 @@ export function useCompanyActivities(companyId: string) {
       .from("company_activities")
       .delete()
       .eq("id", id)
-      .eq("user_id", user.id)
+      .eq("workspace_id", workspaceId)
 
     if (error) {
       fetchActivities()
       return false
     }
     return true
-  }, [fetchActivities])
+  }, [workspaceId, fetchActivities])
 
   return { activities, loading, refetch: fetchActivities, createActivity, deleteActivity }
 }

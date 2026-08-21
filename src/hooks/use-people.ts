@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { useWorkspace } from "@/lib/workspace/context"
 import type { Person } from "@/types/database"
 
 interface UsePeopleOptions {
@@ -14,6 +15,7 @@ interface UsePeopleOptions {
 }
 
 export function usePeople(options: UsePeopleOptions = {}) {
+  const { workspaceId } = useWorkspace()
   const { search, category, companyId, pageSize = 25, sortBy = "created_at", sortDesc = true } = options
   const [people, setPeople] = useState<Person[]>([])
   const [totalCount, setTotalCount] = useState(0)
@@ -74,12 +76,13 @@ export function usePeople(options: UsePeopleOptions = {}) {
   async function createPerson(data: Partial<Person>) {
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return null
+    if (!user || !workspaceId) return null
 
     const { data: person, error } = await supabase
       .from("people")
       .insert({
         ...data,
+        workspace_id: workspaceId,
         user_id: user.id,
       })
       .select("*, company:companies(*)")
@@ -96,7 +99,7 @@ export function usePeople(options: UsePeopleOptions = {}) {
   async function updatePerson(id: string, data: Partial<Person>) {
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return false
+    if (!user || !workspaceId) return false
 
     // Optimistic update
     setPeople((prev) =>
@@ -107,7 +110,7 @@ export function usePeople(options: UsePeopleOptions = {}) {
       .from("people")
       .update(data)
       .eq("id", id)
-      .eq("user_id", user.id)
+      .eq("workspace_id", workspaceId)
 
     if (error) {
       refetch()
@@ -119,7 +122,7 @@ export function usePeople(options: UsePeopleOptions = {}) {
   async function deletePerson(id: string) {
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return false
+    if (!user || !workspaceId) return false
 
     setPeople((prev) => prev.filter((p) => p.id !== id))
     setTotalCount((prev) => prev - 1)
@@ -128,7 +131,7 @@ export function usePeople(options: UsePeopleOptions = {}) {
       .from("people")
       .delete()
       .eq("id", id)
-      .eq("user_id", user.id)
+      .eq("workspace_id", workspaceId)
 
     if (error) {
       refetch()
@@ -152,6 +155,7 @@ export function usePeople(options: UsePeopleOptions = {}) {
 }
 
 export function usePerson(id: string) {
+  const { workspaceId } = useWorkspace()
   const [person, setPerson] = useState<Person | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -174,13 +178,13 @@ export function usePerson(id: string) {
   async function update(data: Partial<Person>) {
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return false
+    if (!user || !workspaceId) return false
 
     const { error } = await supabase
       .from("people")
       .update(data)
       .eq("id", id)
-      .eq("user_id", user.id)
+      .eq("workspace_id", workspaceId)
 
     if (!error) {
       setPerson((prev) => prev ? { ...prev, ...data } : prev)

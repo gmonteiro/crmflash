@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { addDays, format } from "date-fns"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { createClient } from "@/lib/supabase/client"
+import { useWorkspace } from "@/lib/workspace/context"
 import { fetchPipelineSnapshot } from "@/lib/pipeline/snapshot"
 import { detectQuestions } from "@/lib/pipeline/rules"
 import { buildCompanyQueue } from "@/lib/pipeline/queue"
@@ -95,6 +96,7 @@ function stageEffectFor(proposal: CopilotUpdateProposal): CopilotEffect | null {
 }
 
 export function useCopilot() {
+  const { workspaceId } = useWorkspace()
   const [questions, setQuestions] = useState<CopilotQuestion[]>([])
   const [loading, setLoading] = useState(true)
   const [interpreting, setInterpreting] = useState(false)
@@ -131,9 +133,11 @@ export function useCopilot() {
     fetchQuestions()
   }, [fetchQuestions])
 
-  // Executa um efeito. Cada escrita filtra por user_id (defense-in-depth sobre a RLS).
+  // Executa um efeito. Cada escrita filtra por workspace_id (defense-in-depth
+  // sobre a RLS); userId vai junto nos inserts apenas como autoria.
   const applyEffect = useCallback(
     async (supabase: SupabaseClient, userId: string, question: CopilotQuestion, effect: CopilotEffect) => {
+      if (!workspaceId) return
       const companyId = question.companyId
       const snap = snapshotRef.current
       const now = new Date().toISOString()
@@ -148,11 +152,12 @@ export function useCopilot() {
             .from("companies")
             .update({ last_client_event_at: now })
             .eq("id", companyId)
-            .eq("user_id", userId)
+            .eq("workspace_id", workspaceId)
           return
 
         case "note":
           await supabase.from("company_activities").insert({
+            workspace_id: workspaceId,
             user_id: userId,
             company_id: companyId,
             type: "note",
@@ -166,13 +171,14 @@ export function useCopilot() {
             .from("companies")
             .update({ [effect.field]: effect.value })
             .eq("id", companyId)
-            .eq("user_id", userId)
+            .eq("workspace_id", workspaceId)
           return
 
         case "create_next_step": {
           const dueDate =
             effect.dueDate ?? format(addDays(new Date(), effect.inDays ?? 3), DATE_FMT)
           const { error } = await supabase.from("company_next_steps").insert({
+            workspace_id: workspaceId,
             user_id: userId,
             company_id: companyId,
             title: effect.title,
@@ -182,6 +188,7 @@ export function useCopilot() {
           if (error) return
           // Espelha o comportamento de use-company-next-steps.createStep.
           await supabase.from("company_activities").insert({
+            workspace_id: workspaceId,
             user_id: userId,
             company_id: companyId,
             type: "next_step_created",
@@ -196,7 +203,7 @@ export function useCopilot() {
             .from("company_next_steps")
             .update({ status: "completed", completed_at: now })
             .eq("id", effect.stepId)
-            .eq("user_id", userId)
+            .eq("workspace_id", workspaceId)
           return
 
         case "reschedule_next_step":
@@ -204,7 +211,7 @@ export function useCopilot() {
             .from("company_next_steps")
             .update({ due_date: format(addDays(new Date(), effect.inDays), DATE_FMT) })
             .eq("id", effect.stepId)
-            .eq("user_id", userId)
+            .eq("workspace_id", workspaceId)
           return
 
         case "delete_next_step":
@@ -212,13 +219,14 @@ export function useCopilot() {
             .from("company_next_steps")
             .delete()
             .eq("id", effect.stepId)
-            .eq("user_id", userId)
+            .eq("workspace_id", workspaceId)
           return
 
         case "capture_signal": {
           // UNIQUE(company_id, signal_type): se já existe, o insert falha e nada
           // mais acontece — capturar de novo não deve reescrever o histórico.
           const { error } = await supabase.from("company_commitment_signals").insert({
+            workspace_id: workspaceId,
             user_id: userId,
             company_id: companyId,
             signal_type: effect.signal,
@@ -230,8 +238,9 @@ export function useCopilot() {
             .from("companies")
             .update({ last_client_event_at: now })
             .eq("id", companyId)
-            .eq("user_id", userId)
+            .eq("workspace_id", workspaceId)
           await supabase.from("company_activities").insert({
+            workspace_id: workspaceId,
             user_id: userId,
             company_id: companyId,
             type: "note",
@@ -260,6 +269,7 @@ export function useCopilot() {
           const maxPos = inTarget.reduce((m, c) => Math.max(m, c.kanban_position ?? 0), 0)
 
           await applyStageMove(supabase, {
+            workspaceId,
             userId,
             companyId,
             from,
@@ -270,7 +280,7 @@ export function useCopilot() {
         }
       }
     },
-    []
+    [workspaceId]
   )
 
   // Registra a resposta. É isto que faz a pergunta sumir da fila até suppress_until.
@@ -287,7 +297,9 @@ export function useCopilot() {
         applied?: Record<string, unknown> | null
       }
     ) => {
+      if (!workspaceId) return
       await supabase.from("copilot_question_events").insert({
+        workspace_id: workspaceId,
         user_id: userId,
         company_id: question.companyId,
         question_key: question.key,
@@ -299,7 +311,7 @@ export function useCopilot() {
         suppress_until: format(addDays(new Date(), params.suppressDays), DATE_FMT),
       })
     },
-    []
+    [workspaceId]
   )
 
   const runAction = useCallback(
@@ -309,7 +321,7 @@ export function useCopilot() {
 
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return false
+      if (!user || !workspaceId) return false
 
       // Otimista: tira da fila antes de escrever.
       setQuestions((prev) => prev.filter((q) => q.key !== question.key))
@@ -329,14 +341,14 @@ export function useCopilot() {
         return false
       }
     },
-    [applyEffect, recordEvent, fetchQuestions]
+    [workspaceId, applyEffect, recordEvent, fetchQuestions]
   )
 
   const snooze = useCallback(
     async (question: CopilotQuestion, days: number): Promise<boolean> => {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return false
+      if (!user || !workspaceId) return false
 
       setQuestions((prev) => prev.filter((q) => q.key !== question.key))
       await recordEvent(supabase, user.id, question, {
@@ -345,7 +357,7 @@ export function useCopilot() {
       })
       return true
     },
-    [recordEvent]
+    [workspaceId, recordEvent]
   )
 
   // Descartar = suprimir por um ano.
@@ -353,7 +365,7 @@ export function useCopilot() {
     async (question: CopilotQuestion): Promise<boolean> => {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return false
+      if (!user || !workspaceId) return false
 
       setQuestions((prev) => prev.filter((q) => q.key !== question.key))
       await recordEvent(supabase, user.id, question, {
@@ -362,14 +374,14 @@ export function useCopilot() {
       })
       return true
     },
-    [recordEvent]
+    [workspaceId, recordEvent]
   )
 
   // Adia todas as perguntas abertas até amanhã.
   const snoozeAll = useCallback(async (): Promise<boolean> => {
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return false
+    if (!user || !workspaceId) return false
 
     const pending = questions
     setQuestions([])
@@ -377,7 +389,7 @@ export function useCopilot() {
       await recordEvent(supabase, user.id, q, { status: "snoozed", suppressDays: 1 })
     }
     return true
-  }, [questions, recordEvent])
+  }, [workspaceId, questions, recordEvent])
 
   // Manda a narração para o servidor interpretar. Não escreve nada — devolve
   // uma proposta que o usuário revisa item a item antes de aplicar.
@@ -425,7 +437,7 @@ export function useCopilot() {
     ): Promise<boolean> => {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return false
+      if (!user || !workspaceId) return false
 
       // A pendência mais prioritária responde pelos efeitos: applyEffect só usa
       // company_id, e o log de auditoria de cada pendência vem depois, no passo 7.
@@ -512,7 +524,7 @@ export function useCopilot() {
         return false
       }
     },
-    [applyEffect, recordEvent, fetchQuestions]
+    [workspaceId, applyEffect, recordEvent, fetchQuestions]
   )
 
   // Adiar a conta inteira: mesmo efeito de "já respondi isso hoje", só que
@@ -521,7 +533,7 @@ export function useCopilot() {
     async (item: CompanyQueueItem, days = 1): Promise<boolean> => {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return false
+      if (!user || !workspaceId) return false
 
       setQuestions((prev) => prev.filter((q) => q.companyId !== item.companyId))
       for (const pending of item.pendings) {
@@ -529,7 +541,7 @@ export function useCopilot() {
       }
       return true
     },
-    [recordEvent]
+    [workspaceId, recordEvent]
   )
 
   const queue = useMemo(() => buildCompanyQueue(questions), [questions])

@@ -2,9 +2,11 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { useWorkspace } from "@/lib/workspace/context"
 import type { CompanyDocument, DocumentType } from "@/types/database"
 
 export function useCompanyDocuments(companyId: string) {
+  const { workspaceId } = useWorkspace()
   const [documents, setDocuments] = useState<CompanyDocument[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -33,7 +35,7 @@ export function useCompanyDocuments(companyId: string) {
   ) => {
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return null
+    if (!user || !workspaceId) return null
 
     const fileId = crypto.randomUUID()
     // Sanitize filename: remove path separators and dangerous chars
@@ -51,6 +53,7 @@ export function useCompanyDocuments(companyId: string) {
     const { data: doc, error } = await supabase
       .from("company_documents")
       .insert({
+        workspace_id: workspaceId,
         user_id: user.id,
         company_id: companyId,
         name: file.name,
@@ -69,6 +72,7 @@ export function useCompanyDocuments(companyId: string) {
 
     // Auto-create timeline activity
     await supabase.from("company_activities").insert({
+      workspace_id: workspaceId,
       user_id: user.id,
       company_id: companyId,
       type: "document_uploaded",
@@ -77,7 +81,7 @@ export function useCompanyDocuments(companyId: string) {
     })
 
     return doc
-  }, [companyId])
+  }, [workspaceId, companyId])
 
   const downloadDocument = useCallback(async (doc: CompanyDocument) => {
     const supabase = createClient()
@@ -107,14 +111,14 @@ export function useCompanyDocuments(companyId: string) {
       .from("company_documents")
       .delete()
       .eq("id", doc.id)
-      .eq("user_id", user.id)
+      .eq("workspace_id", workspaceId)
 
     if (error) {
       fetchDocuments()
       return false
     }
     return true
-  }, [fetchDocuments])
+  }, [workspaceId, fetchDocuments])
 
   return { documents, loading, refetch: fetchDocuments, uploadDocument, downloadDocument, deleteDocument }
 }
