@@ -10,6 +10,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { MoreHorizontal, ExternalLink, Trash2, Eye, ArrowUpDown, ArrowUp, ArrowDown, Linkedin } from "lucide-react"
 import Link from "next/link"
 import { safeHref } from "@/lib/utils"
+import { ownerLabels } from "@/lib/owners"
 
 interface ColumnOptions {
   onUpdate: (id: string, data: Partial<Person>) => void
@@ -18,6 +19,8 @@ interface ColumnOptions {
   sortDirection?: "asc" | "desc"
   onSortChange: (column: string) => void
   shortlistsByPerson?: Record<string, { id: string; name: string }[]>
+  ownersByPerson?: Record<string, string[]>
+  memberEmails?: Record<string, string>
 }
 
 function SortHeader({
@@ -48,7 +51,7 @@ function SortHeader({
   )
 }
 
-export function getPeopleColumns({ onUpdate, onDelete, sortBy, sortDirection, onSortChange, shortlistsByPerson }: ColumnOptions): ColumnDef<Person>[] {
+export function getPeopleColumns({ onUpdate, onDelete, sortBy, sortDirection, onSortChange, shortlistsByPerson, ownersByPerson, memberEmails }: ColumnOptions): ColumnDef<Person>[] {
   return [
     {
       id: "select",
@@ -139,6 +142,19 @@ export function getPeopleColumns({ onUpdate, onDelete, sortBy, sortDirection, on
             />
           </div>
         )
+      },
+    },
+    {
+      id: "owners",
+      header: "Dono",
+      cell: ({ row }) => {
+        // Dois nomes quando o contato é comum a duas pessoas — é o caso que a
+        // tabela people_owners existe para representar.
+        const labels = ownerLabels(ownersByPerson?.[row.original.id], memberEmails ?? {})
+        if (labels.length === 0) {
+          return <span className="text-sm text-muted-foreground">-</span>
+        }
+        return <span className="text-sm whitespace-nowrap">{labels.join(", ")}</span>
       },
     },
     {

@@ -15,6 +15,7 @@ import { toast } from "sonner"
 export default function PeoplePage() {
   const [search, setSearch] = useState("")
   const [category, setCategory] = useState("all")
+  const [owner, setOwner] = useState("all")
   const [formOpen, setFormOpen] = useState(false)
   const [sortBy, setSortBy] = useState<string>("created_at")
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc")
@@ -27,6 +28,7 @@ export default function PeoplePage() {
   const { people, totalCount, loading, page, totalPages, goToPage, createPerson, updatePerson, deletePerson } = usePeople({
     search: search || undefined,
     category: category !== "all" ? category : undefined,
+    ownerId: owner !== "all" ? owner : undefined,
     sortBy,
     sortDesc: sortDirection === "desc",
   })
@@ -95,6 +97,8 @@ export default function PeoplePage() {
             onSearchChange={setSearch}
             category={category}
             onCategoryChange={setCategory}
+            owner={owner}
+            onOwnerChange={setOwner}
             onAddPerson={() => setFormOpen(true)}
             selectedCount={selectedIds.length}
             onAddToShortlist={() => setShortlistDialogOpen(true)}

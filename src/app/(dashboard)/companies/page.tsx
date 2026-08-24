@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { INDUSTRIES } from "@/lib/constants"
 import { ReasoningPanel } from "@/components/shared/reasoning-panel"
+import { OwnerFilter } from "@/components/shared/owner-filter"
 import { Search, Plus, Sparkles, ListPlus } from "lucide-react"
 import { toast } from "sonner"
 import type { CompanyFormData } from "@/lib/validators"
@@ -34,6 +35,7 @@ function isUnenriched(c: Company) {
 export default function CompaniesPage() {
   const [search, setSearch] = useState("")
   const [industry, setIndustry] = useState("all")
+  const [owner, setOwner] = useState("all")
   const [page, setPage] = useState(0)
   const [formOpen, setFormOpen] = useState(false)
   const [enrichOpen, setEnrichOpen] = useState(false)
@@ -45,6 +47,7 @@ export default function CompaniesPage() {
   const { companies, loading, pageCount, refetch, createCompany, deleteCompany } = useCompanies({
     search: search || undefined,
     industry: industry !== "all" ? industry : undefined,
+    ownerId: owner !== "all" ? owner : undefined,
     page,
     sortBy,
     sortDirection,
@@ -139,6 +142,7 @@ export default function CompaniesPage() {
                   ))}
                 </SelectContent>
               </Select>
+              <OwnerFilter value={owner} onChange={(v) => { setOwner(v); setPage(0) }} />
             </div>
             <div className="flex items-center gap-2">
               {selectedIds.length > 0 && (

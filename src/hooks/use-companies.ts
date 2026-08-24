@@ -8,6 +8,8 @@ import type { Company } from "@/types/database"
 interface UseCompaniesOptions {
   search?: string
   industry?: string
+  /** user_id do dono. Casa com a coluna Dono: contatos dele + empresas que criou. */
+  ownerId?: string
   page?: number
   pageSize?: number
   sortBy?: string
@@ -15,7 +17,7 @@ interface UseCompaniesOptions {
 }
 
 export function useCompanies(options: UseCompaniesOptions = {}) {
-  const { search, industry, page = 0, pageSize = 25, sortBy, sortDirection } = options
+  const { search, industry, ownerId, page = 0, pageSize = 25, sortBy, sortDirection } = options
   const { workspaceId } = useWorkspace()
   const [companies, setCompanies] = useState<Company[]>([])
   const [totalCount, setTotalCount] = useState(0)
@@ -25,9 +27,17 @@ export function useCompanies(options: UseCompaniesOptions = {}) {
     setLoading(true)
     const supabase = createClient()
 
+    // `owners` e a relacao computada da migration 014 — company_owners e uma
+    // view com union e o PostgREST nao infere relacao com view. Sem ela o
+    // filtro so alcancaria empresas com contato, e discordaria da coluna nas
+    // empresas sem contato nenhum.
     let query = supabase
       .from("companies")
-      .select("*", { count: "exact" })
+      .select(ownerId ? "*, owners!inner(user_id)" : "*", { count: "exact" })
+
+    if (ownerId) {
+      query = query.eq("owners.user_id", ownerId)
+    }
 
     if (search) {
       query = query.ilike("name", `%${search}%`)
@@ -47,9 +57,14 @@ export function useCompanies(options: UseCompaniesOptions = {}) {
     if (!error && data) {
       setCompanies(data)
       setTotalCount(count ?? 0)
+    } else if (error) {
+      // Sem barulho a lista so ficaria parada na pagina anterior. O suspeito
+      // numero um e o filtro por dono sem a migration 014: o PostgREST
+      // devolve PGRST200 e nada na tela explica por que.
+      console.error("Falha ao listar empresas:", error.message)
     }
     setLoading(false)
-  }, [search, industry, page, pageSize, sortBy, sortDirection])
+  }, [search, industry, ownerId, page, pageSize, sortBy, sortDirection])
 
   useEffect(() => {
     fetchCompanies()

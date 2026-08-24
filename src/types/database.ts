@@ -287,3 +287,20 @@ export interface WorkspaceInvitation {
   status: InvitationStatus
   created_at: string
 }
+
+// ---------------------------------------------------------------------------
+// Donos de contato (migration 013)
+// ---------------------------------------------------------------------------
+
+/** Quem trabalha o contato. Diferente de Person.user_id, que e autoria. */
+export interface PersonOwner {
+  person_id: string
+  user_id: string
+  created_at: string
+}
+
+/** View: donos dos contatos da empresa, mais quem criou a empresa. */
+export interface CompanyOwner {
+  company_id: string
+  user_id: string
+}

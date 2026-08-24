@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   useReactTable,
   getCoreRowModel,
@@ -13,6 +13,8 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { getPeopleColumns } from "./people-table-columns"
 import type { Person } from "@/types/database"
 import { useRouter } from "next/navigation"
+import { usePeopleOwners } from "@/hooks/use-owners"
+import { useMemberEmails } from "@/hooks/use-workspace-members"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 
 interface PeopleTableProps {
@@ -48,7 +50,14 @@ export function PeopleTable({
 }: PeopleTableProps) {
   const router = useRouter()
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
-  const columns = getPeopleColumns({ onUpdate, onDelete, sortBy, sortDirection, onSortChange, shortlistsByPerson })
+
+  // Os donos vêm aqui, e não da página: só a tabela sabe quais 25 linhas estão
+  // visíveis, e é só para elas que a coluna precisa do vínculo.
+  const personIds = useMemo(() => people.map((p) => p.id), [people])
+  const ownersByPerson = usePeopleOwners(personIds)
+  const memberEmails = useMemberEmails()
+
+  const columns = getPeopleColumns({ onUpdate, onDelete, sortBy, sortDirection, onSortChange, shortlistsByPerson, ownersByPerson, memberEmails })
 
   const table = useReactTable({
     data: people,

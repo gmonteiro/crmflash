@@ -37,7 +37,9 @@ export function ImportProgress({ progress, done, results, onReset }: ImportProgr
             {results.skipped > 0 && (
               <div className="flex items-center gap-2">
                 <AlertCircle className="h-4 w-4 text-yellow-500" />
-                <span className="text-sm">{results.skipped} duplicates skipped</span>
+                <span className="text-sm">
+                  {results.skipped} already existed — you&apos;re now a co-owner
+                </span>
               </div>
             )}
             {results.errors > 0 && (

@@ -4,12 +4,15 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Search, Plus, Linkedin, ListPlus } from "lucide-react"
+import { OwnerFilter } from "@/components/shared/owner-filter"
 
 interface PeopleTableToolbarProps {
   search: string
   onSearchChange: (value: string) => void
   category: string
   onCategoryChange: (value: string) => void
+  owner: string
+  onOwnerChange: (value: string) => void
   onAddPerson: () => void
   selectedCount?: number
   onBulkEnrich?: () => void
@@ -21,6 +24,8 @@ export function PeopleTableToolbar({
   onSearchChange,
   category,
   onCategoryChange,
+  owner,
+  onOwnerChange,
   onAddPerson,
   selectedCount = 0,
   onBulkEnrich,
@@ -51,6 +56,7 @@ export function PeopleTableToolbar({
             <SelectItem value="Other">Other</SelectItem>
           </SelectContent>
         </Select>
+        <OwnerFilter value={owner} onChange={onOwnerChange} />
       </div>
       <div className="flex items-center gap-2">
         {selectedCount > 0 && onAddToShortlist && (

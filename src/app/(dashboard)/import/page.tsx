@@ -1,11 +1,14 @@
 "use client"
 
 import { useImport } from "@/hooks/use-import"
+import { useWorkspace } from "@/lib/workspace/context"
+import { useMemberEmails } from "@/hooks/use-workspace-members"
+import { loginFromEmail } from "@/lib/owners"
 import { FileUploadZone } from "@/components/import/file-upload-zone"
 import { ColumnMapper } from "@/components/import/column-mapper"
 import { ImportPreview } from "@/components/import/import-preview"
 import { ImportProgress } from "@/components/import/import-progress"
-import { Loader2 } from "lucide-react"
+import { Loader2, UserCircle2 } from "lucide-react"
 
 export default function ImportPage() {
   const {
@@ -21,6 +24,13 @@ export default function ImportPage() {
     executeImport,
     reset,
   } = useImport()
+
+  // Quem sobe a planilha vira dono dos contatos dela. Dizer isso ANTES do
+  // botao evita a descoberta pela listagem depois de 4.000 linhas.
+  const { userId } = useWorkspace()
+  const emails = useMemberEmails()
+  const ownerLogin = userId && emails[userId] ? loginFromEmail(emails[userId]) : null
+  const showOwner = ["mapping", "validating", "preview"].includes(step)
 
   return (
     <div className="space-y-4 max-w-3xl">
@@ -56,6 +66,17 @@ export default function ImportPage() {
           )
         })}
       </div>
+
+      {showOwner && ownerLogin && (
+        <div className="flex items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-sm">
+          <UserCircle2 className="h-4 w-4 text-muted-foreground" />
+          <span className="text-muted-foreground">Importando como</span>
+          <span className="font-medium">{ownerLogin}</span>
+          <span className="text-muted-foreground">
+            — estes contatos ficam registrados como seus
+          </span>
+        </div>
+      )}
 
       {step === "upload" && (
         <FileUploadZone onFileSelect={handleFileSelect} />

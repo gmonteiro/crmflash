@@ -9,6 +9,8 @@ interface UsePeopleOptions {
   search?: string
   category?: string
   companyId?: string
+  /** user_id do dono. Filtra pelo vinculo, nao pela autoria. */
+  ownerId?: string
   pageSize?: number
   sortBy?: string
   sortDesc?: boolean
@@ -16,7 +18,7 @@ interface UsePeopleOptions {
 
 export function usePeople(options: UsePeopleOptions = {}) {
   const { workspaceId } = useWorkspace()
-  const { search, category, companyId, pageSize = 25, sortBy = "created_at", sortDesc = true } = options
+  const { search, category, companyId, ownerId, pageSize = 25, sortBy = "created_at", sortDesc = true } = options
   const [people, setPeople] = useState<Person[]>([])
   const [totalCount, setTotalCount] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -29,9 +31,21 @@ export function usePeople(options: UsePeopleOptions = {}) {
 
     const supabase = createClient()
 
+    // O embed !inner e o filtro: descarta quem nao tem vinculo com esse dono,
+    // e como a PK de people_owners e (person_id, user_id) nenhuma pessoa casa
+    // duas vezes — a contagem continua exata e a paginacao nao repete linha.
     let query = supabase
       .from("people")
-      .select("*, company:companies(*)", { count: "exact" })
+      .select(
+        ownerId
+          ? "*, company:companies(*), people_owners!inner(user_id)"
+          : "*, company:companies(*)",
+        { count: "exact" }
+      )
+
+    if (ownerId) {
+      query = query.eq("people_owners.user_id", ownerId)
+    }
 
     if (search) {
       query = query.ilike("full_name", `%${search}%`)
@@ -55,7 +69,7 @@ export function usePeople(options: UsePeopleOptions = {}) {
       setTotalCount(count ?? 0)
     }
     setLoading(false)
-  }, [search, category, companyId, pageSize, sortBy, sortDesc])
+  }, [search, category, companyId, ownerId, pageSize, sortBy, sortDesc])
 
   // Reset and fetch first page when filters/sort change
   useEffect(() => {

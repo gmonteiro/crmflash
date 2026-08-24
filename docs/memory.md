@@ -444,3 +444,45 @@ sem esse teto uma conta bagunçada monopoliza a fila inteira.
 - **Testes:** o projeto ganhou `vitest` (`npm test`). Primeiros testes:
   `queue.test.ts` e `rules.test.ts` (tetos, ordem, supressao).
 - **Design completo:** `docs/superpowers/specs/2026-08-20-copiloto-fila-por-empresa-design.md`
+
+## Donos de contato (2026-08-24)
+
+- **Problema:** depois da 010 `user_id` virou autoria ("quem criou a linha") e
+  ninguem responde mais "de quem e este contato?". Pior: o dedup do import PULA
+  quem ja existe, entao "a Maria tambem tem esse contato" nao cabia em coluna
+  nenhuma — era cardinalidade faltando, nao coluna faltando.
+- **`people_owners`** (migration 013): tabela filha de `people`, PK
+  `(person_id, user_id)`, sem `workspace_id` (escopada pelo pai, como
+  `people_tags`). `on delete cascade` no `user_id`, ao contrario do `set null`
+  da 010: autoria e historico e sobrevive a conta apagada, propriedade e
+  vinculo vivo e morre com ela.
+- **`company_owners` e VIEW, nao tabela.** Donos dos contatos da empresa +
+  quem criou a empresa. Tabela precisaria sincronizar a cada troca de empresa
+  de contato; view nao sai de sincronia porque nao guarda nada.
+  `security_invoker = on` — sem isso a view roda como dona e devolve os donos
+  de qualquer workspace.
+- **Trigger `people_owners_seed`**, nao chamada em cada call site: contato
+  nasce em 5 lugares (import, formulario, copilot, 2 rotas de integracao).
+  `security definer` porque o insert do trigger passaria pela policy e falhar
+  ali derrubaria a criacao do contato.
+- **Import mudou em um ponto so:** o dedup montava `Set` de chaves; agora monta
+  `Map` chave→id, e as linhas puladas viram co-propriedade (upsert com
+  `ignoreDuplicates`, lotes de 500). Contato novo nao precisa de nada — o
+  trigger cuida. A tela ganhou "Importando como <login>" antes do botao.
+- **Coluna Dono** em `/people` e `/companies`, so leitura, uma query por pagina
+  (`usePeopleOwners`/`useCompanyOwners`), formato login = e-mail antes do `@`.
+  Divergencia deliberada da timeline: ela esconde autoria com 1 membro, a
+  coluna aparece sempre — coluna que some sozinha confunde mais que o ruido.
+- **Verificacao:** `node --env-file=.env.local scripts/verify-contact-owners.mjs`
+  (trigger, par duplicado, os dois nomes, heranca da empresa, RLS do outsider).
+- **Design completo:** `docs/superpowers/specs/2026-08-24-crmflash-donos-de-contato-design.md`
+
+- **Filtro por dono (mesmo dia):** `<Select>` nas duas listagens, some com 1
+  membro. People e embed `people_owners!inner` de graca (tem FK). Companies
+  precisou da **migration 014**: `company_owners` e view com union, o PostgREST
+  nao infere relacao (PGRST200 confirmado), entao virou RELACAO COMPUTADA —
+  `owners(companies)` returns setof company_owners, e a query fica
+  `companies?select=*,owners!inner(user_id)`. A alternativa sem migration
+  (`people!inner(people_owners!inner(...))`) alcanca 3.044 das 3.059 empresas:
+  perde as sem contato nenhum, onde o dono e so o criador — filtro discordando
+  da coluna do lado.

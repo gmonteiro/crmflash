@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import {
   useReactTable,
   getCoreRowModel,
@@ -17,6 +17,9 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { MoreHorizontal, Eye, Trash2, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
 import type { Company } from "@/types/database"
 import { safeHref } from "@/lib/utils"
+import { ownerLabels } from "@/lib/owners"
+import { useCompanyOwners } from "@/hooks/use-owners"
+import { useMemberEmails } from "@/hooks/use-workspace-members"
 import Link from "next/link"
 
 interface CompanyTableProps {
@@ -73,6 +76,12 @@ export function CompanyTable({
   onSelectionChange,
 }: CompanyTableProps) {
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
+
+  // Só os ids visíveis: a view company_owners varre os contatos da empresa, e
+  // não há por que pedir isso para as 3.058 quando a tela mostra 25.
+  const companyIds = useMemo(() => companies.map((c) => c.id), [companies])
+  const ownersByCompany = useCompanyOwners(companyIds)
+  const memberEmails = useMemberEmails()
 
   useEffect(() => {
     if (onSelectionChange) {
@@ -161,6 +170,19 @@ export function CompanyTable({
             {row.original.domain || (() => { try { return new URL(row.original.website!).hostname } catch { return row.original.website } })()}
           </a>
         ) : null,
+    },
+    {
+      id: "owners",
+      header: "Dono",
+      cell: ({ row }) => {
+        // Derivado da view: quem é dono de algum contato da empresa, mais quem
+        // criou a empresa. Dois nomes quando duas pessoas trabalham a mesma.
+        const labels = ownerLabels(ownersByCompany[row.original.id], memberEmails)
+        if (labels.length === 0) {
+          return <span className="text-sm text-muted-foreground">-</span>
+        }
+        return <span className="text-sm whitespace-nowrap">{labels.join(", ")}</span>
+      },
     },
     {
       id: "actions",

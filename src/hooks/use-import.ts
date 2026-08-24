@@ -103,10 +103,13 @@ export function useImport() {
 
     // --- Database dedup: skip people that already exist ---
     // Key: name + title + company (case-insensitive)
-    const existingKeys = new Set<string>()
+    //
+    // Map, e nao Set: o contato que ja existe nao e mais so "pular". Quem esta
+    // subindo a planilha vira co-dono dele, e para isso e preciso o id.
+    const existingIds = new Map<string, string>()
     const { data: allPeople } = await supabase
       .from("people")
-      .select("first_name, last_name, current_title, current_company")
+      .select("id, first_name, last_name, current_title, current_company")
       .eq("workspace_id", workspaceId)
       .limit(50000)
 
@@ -118,11 +121,12 @@ export function useImport() {
           (p.current_title || ""),
           (p.current_company || ""),
         ].map((s) => s.toLowerCase().trim()).join("|")
-        existingKeys.add(key)
+        existingIds.set(key, p.id)
       }
     }
 
     let skippedCount = 0
+    const coOwnedIds = new Set<string>()
     const deduplicatedRows = validRows.filter((v) => {
       const key = [
         (v.data.first_name || ""),
@@ -130,12 +134,44 @@ export function useImport() {
         (v.data.current_title || ""),
         (v.data.current_company || ""),
       ].map((s) => s.toLowerCase().trim()).join("|")
-      if (existingKeys.has(key)) {
+      const existingId = existingIds.get(key)
+      if (existingId) {
+        coOwnedIds.add(existingId)
         skippedCount++
         return false
       }
       return true
     })
+
+    // --- Co-propriedade: o contato que ja estava aqui ganha mais um dono ---
+    //
+    // E este o caso que a coluna Dono mostra com dois nomes. A linha continua
+    // unica: o que a planilha repetida acrescenta e o vinculo, nao o contato.
+    //
+    // ignoreDuplicates porque subir a mesma planilha duas vezes tem que ser
+    // inofensivo. Os contatos NOVOS nao aparecem aqui: o trigger
+    // people_owners_seed (migration 013) ja grava o dono no insert.
+    if (coOwnedIds.size > 0) {
+      const ownerRows = [...coOwnedIds].map((personId) => ({
+        person_id: personId,
+        user_id: user.id,
+      }))
+      const ownerChunkSize = 500
+      for (let i = 0; i < ownerRows.length; i += ownerChunkSize) {
+        const { error: ownerError } = await supabase
+          .from("people_owners")
+          .upsert(ownerRows.slice(i, i + ownerChunkSize), {
+            onConflict: "person_id,user_id",
+            ignoreDuplicates: true,
+          })
+
+        // Nao aborta o import: os contatos novos ainda valem a pena. Vai para
+        // o mesmo `errors` do import_history, que e onde se olha depois.
+        if (ownerError) {
+          importErrors.push({ step: "co-ownership", error: ownerError.message })
+        }
+      }
+    }
 
     // --- Pre-deduplicate companies (case-insensitive) ---
     const companyMap = new Map<string, string>() // lowercase name -> id
