@@ -7,8 +7,10 @@ import { parseCsv, type ParseResult } from "@/lib/import/parse-csv"
 import { parseXlsx } from "@/lib/import/parse-xlsx"
 import { autoMapColumns } from "@/lib/import/map-columns"
 import { validateRow, type RowValidation } from "@/lib/import/validate-row"
+import { fetchAllRows } from "@/lib/import/fetch-all-rows"
 
 export type ImportStep = "upload" | "mapping" | "validating" | "preview" | "executing" | "done"
+
 
 export function useImport() {
   const { workspaceId } = useWorkspace()
@@ -107,22 +109,28 @@ export function useImport() {
     // Map, e nao Set: o contato que ja existe nao e mais so "pular". Quem esta
     // subindo a planilha vira co-dono dele, e para isso e preciso o id.
     const existingIds = new Map<string, string>()
-    const { data: allPeople } = await supabase
-      .from("people")
-      .select("id, first_name, last_name, current_title, current_company")
-      .eq("workspace_id", workspaceId)
-      .limit(50000)
+    const allPeople = await fetchAllRows<{
+      id: string
+      first_name: string | null
+      last_name: string | null
+      current_title: string | null
+      current_company: string | null
+    }>(() =>
+      supabase
+        .from("people")
+        .select("id, first_name, last_name, current_title, current_company")
+        .eq("workspace_id", workspaceId)
+        .order("id")
+    )
 
-    if (allPeople) {
-      for (const p of allPeople) {
-        const key = [
-          (p.first_name || ""),
-          (p.last_name || ""),
-          (p.current_title || ""),
-          (p.current_company || ""),
-        ].map((s) => s.toLowerCase().trim()).join("|")
-        existingIds.set(key, p.id)
-      }
+    for (const p of allPeople) {
+      const key = [
+        (p.first_name || ""),
+        (p.last_name || ""),
+        (p.current_title || ""),
+        (p.current_company || ""),
+      ].map((s) => s.toLowerCase().trim()).join("|")
+      existingIds.set(key, p.id)
     }
 
     let skippedCount = 0
@@ -176,17 +184,19 @@ export function useImport() {
     // --- Pre-deduplicate companies (case-insensitive) ---
     const companyMap = new Map<string, string>() // lowercase name -> id
 
-    // Fetch all existing companies for this user (single query, case-insensitive match)
-    const { data: allCompanies } = await supabase
-      .from("companies")
-      .select("id, name")
-      .eq("workspace_id", workspaceId)
-      .limit(50000)
+    // companies nao tem indice unico em name: aqui o milheiro truncado nao
+    // estourava erro nenhum, so recriava empresa que ja existia. Silencioso e
+    // pior — o CRM ficava com "VTEX" tres vezes e ninguem via.
+    const allCompanies = await fetchAllRows<{ id: string; name: string }>(() =>
+      supabase
+        .from("companies")
+        .select("id, name")
+        .eq("workspace_id", workspaceId)
+        .order("id")
+    )
 
-    if (allCompanies) {
-      for (const c of allCompanies) {
-        companyMap.set(c.name.toLowerCase(), c.id)
-      }
+    for (const c of allCompanies) {
+      companyMap.set(c.name.toLowerCase(), c.id)
     }
 
     const uniqueCompanyNames = [
@@ -248,13 +258,31 @@ export function useImport() {
         }
       })
 
-      const { error } = await supabase.from("people").insert(inserts)
+      // upsert com ignoreDuplicates, e nao insert: insert multi-row e UMA
+      // statement, entao uma linha que bate no idx_people_dedup aborta as
+      // outras 499 junto. Era isso que transformava um punhado de duplicatas
+      // em "3.738 erros" — o lote inteiro caia por causa de um vizinho.
+      //
+      // onConflict so aponta colunas reais, e por isso a 015 materializou
+      // dedup_key. O que colide agora vira linha pulada, que e o mesmo destino
+      // que o dedup em memoria ja da a quem ele consegue ver.
+      const { data: inserted, error } = await supabase
+        .from("people")
+        .upsert(inserts, {
+          onConflict: "workspace_id,dedup_key",
+          ignoreDuplicates: true,
+        })
+        .select("id")
 
       if (error) {
         errorCount += batch.length
         importErrors.push({ batch: i / batchSize, error: error.message })
       } else {
-        successCount += batch.length
+        // upsert nao devolve o que ignorou. A diferenca e duplicata que
+        // escapou do dedup em memoria — pulada, nao perdida.
+        const created = inserted?.length ?? 0
+        successCount += created
+        skippedCount += batch.length - created
       }
 
       setProgress(Math.round(((i + batch.length) / deduplicatedRows.length) * 100))
