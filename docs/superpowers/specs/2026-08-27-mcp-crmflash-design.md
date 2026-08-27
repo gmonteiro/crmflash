@@ -42,6 +42,18 @@ pelo app.
 - **Tabelas relevantes:** `companies`, `people`, `company_activities`,
   `company_next_steps`, `company_commitment_signals`, `company_stage_events`,
   `copilot_question_events`, `kanban_columns`.
+- **Duas tabelas de atividade, com donos diferentes.** `activities` é escrita
+  só pelo TranscriptionApp (`/api/integration/activities`) e lida pelo snapshot
+  — é dela que a regra `meeting_yesterday` tira "houve reunião ontem".
+  `company_activities` é onde **todo o app** escreve: timeline, documentos,
+  next steps, pipeline e o próprio copiloto. O MCP escreve em
+  `company_activities`. Consequência aceita: narrar uma reunião pelo MCP não
+  dispara `meeting_yesterday` — e não deve mesmo, já que a pergunta daquela
+  regra é exatamente o que você acabou de responder.
+- **As escritas do copiloto estão presas ao cliente.** `applyEffect` e
+  `recordEvent` vivem dentro de `useCopilot()` (`src/hooks/use-copilot.ts`), e
+  são exatamente o que as tools de escrita precisam. Extraí-las para
+  `src/lib/pipeline/` é pré-requisito da Fatia 1.
 - **Já instalados:** `zod`, `@supabase/supabase-js`, `vitest`.
 - **Produção:** `https://crmflash.vercel.app`.
 
