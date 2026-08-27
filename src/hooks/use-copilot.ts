@@ -1,15 +1,15 @@
 "use client"
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react"
-import { addDays, format } from "date-fns"
+import { format } from "date-fns"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { createClient } from "@/lib/supabase/client"
 import { useWorkspace } from "@/lib/workspace/context"
 import { fetchPipelineSnapshot } from "@/lib/pipeline/snapshot"
 import { detectQuestions } from "@/lib/pipeline/rules"
 import { buildCompanyQueue } from "@/lib/pipeline/queue"
-import { applyStageMove } from "@/lib/pipeline/move"
-import { nextStage, prevStage, stageByTitle, colById } from "@/lib/pipeline/stages"
+import { applyEffect as applyEffectImpl } from "@/lib/pipeline/effects"
+import { recordCopilotEvent } from "@/lib/pipeline/copilot-events"
 import type { PipelineSnapshot } from "@/lib/pipeline/types"
 import { COMMITMENT_SIGNALS, NARRATION_SUPPRESS_DAYS } from "@/lib/constants"
 import type {
@@ -133,157 +133,31 @@ export function useCopilot() {
     fetchQuestions()
   }, [fetchQuestions])
 
-  // Executa um efeito. Cada escrita filtra por workspace_id (defense-in-depth
-  // sobre a RLS); userId vai junto nos inserts apenas como autoria.
+  // Preenche o contexto e delega. A escrita de verdade mora em
+  // lib/pipeline/effects.ts, porque o servidor MCP precisa dela tambem.
   const applyEffect = useCallback(
-    async (supabase: SupabaseClient, userId: string, question: CopilotQuestion, effect: CopilotEffect) => {
+    async (
+      supabase: SupabaseClient,
+      userId: string,
+      question: CopilotQuestion,
+      effect: CopilotEffect
+    ) => {
       if (!workspaceId) return
-      const companyId = question.companyId
-      const snap = snapshotRef.current
-      const now = new Date().toISOString()
-
-      switch (effect.kind) {
-        case "none":
-        case "open_drafts":
-          return
-
-        case "mark_client_event":
-          await supabase
-            .from("companies")
-            .update({ last_client_event_at: now })
-            .eq("id", companyId)
-            .eq("workspace_id", workspaceId)
-          return
-
-        case "note":
-          await supabase.from("company_activities").insert({
-            workspace_id: workspaceId,
-            user_id: userId,
-            company_id: companyId,
-            type: "note",
-            title: effect.text,
-            date: now,
-          })
-          return
-
-        case "set_field":
-          await supabase
-            .from("companies")
-            .update({ [effect.field]: effect.value })
-            .eq("id", companyId)
-            .eq("workspace_id", workspaceId)
-          return
-
-        case "create_next_step": {
-          const dueDate =
-            effect.dueDate ?? format(addDays(new Date(), effect.inDays ?? 3), DATE_FMT)
-          const { error } = await supabase.from("company_next_steps").insert({
-            workspace_id: workspaceId,
-            user_id: userId,
-            company_id: companyId,
-            title: effect.title,
-            due_date: dueDate,
-            status: "pending",
-          })
-          if (error) return
-          // Espelha o comportamento de use-company-next-steps.createStep.
-          await supabase.from("company_activities").insert({
-            workspace_id: workspaceId,
-            user_id: userId,
-            company_id: companyId,
-            type: "next_step_created",
-            title: `Next step created: ${effect.title}`,
-            date: now,
-          })
-          return
-        }
-
-        case "complete_next_step":
-          await supabase
-            .from("company_next_steps")
-            .update({ status: "completed", completed_at: now })
-            .eq("id", effect.stepId)
-            .eq("workspace_id", workspaceId)
-          return
-
-        case "reschedule_next_step":
-          await supabase
-            .from("company_next_steps")
-            .update({ due_date: format(addDays(new Date(), effect.inDays), DATE_FMT) })
-            .eq("id", effect.stepId)
-            .eq("workspace_id", workspaceId)
-          return
-
-        case "delete_next_step":
-          await supabase
-            .from("company_next_steps")
-            .delete()
-            .eq("id", effect.stepId)
-            .eq("workspace_id", workspaceId)
-          return
-
-        case "capture_signal": {
-          // UNIQUE(company_id, signal_type): se já existe, o insert falha e nada
-          // mais acontece — capturar de novo não deve reescrever o histórico.
-          const { error } = await supabase.from("company_commitment_signals").insert({
-            workspace_id: workspaceId,
-            user_id: userId,
-            company_id: companyId,
-            signal_type: effect.signal,
-            captured_at: now,
-          })
-          if (error) return
-          // Sinal de compromisso é um evento do cliente → reseta o contador.
-          await supabase
-            .from("companies")
-            .update({ last_client_event_at: now })
-            .eq("id", companyId)
-            .eq("workspace_id", workspaceId)
-          await supabase.from("company_activities").insert({
-            workspace_id: workspaceId,
-            user_id: userId,
-            company_id: companyId,
-            type: "note",
-            title: `Sinal de compromisso: ${effect.label}`,
-            date: now,
-          })
-          return
-        }
-
-        case "move_stage": {
-          if (!snap) return
-          const company = snap.companies.find((c) => c.id === companyId)
-          if (!company) return
-          const byId = colById(snap.columns)
-          const from = byId.get(company.kanban_column_id) ?? null
-          if (!from) return
-
-          let to = null
-          if (effect.target === "next") to = nextStage(snap.columns, from)
-          else if (effect.target === "prev") to = prevStage(snap.columns, from)
-          else if (effect.title) to = stageByTitle(snap.columns, effect.title)
-          if (!to || to.id === from.id) return
-
-          // Entra no fim da coluna de destino.
-          const inTarget = snap.companies.filter((c) => c.kanban_column_id === to!.id)
-          const maxPos = inTarget.reduce((m, c) => Math.max(m, c.kanban_position ?? 0), 0)
-
-          await applyStageMove(supabase, {
-            workspaceId,
-            userId,
-            companyId,
-            from,
-            to,
-            position: maxPos + 1,
-          })
-          return
-        }
-      }
+      await applyEffectImpl(
+        supabase,
+        {
+          workspaceId,
+          userId,
+          companyId: question.companyId,
+          snapshot: snapshotRef.current,
+        },
+        effect
+      )
     },
     [workspaceId]
   )
 
-  // Registra a resposta. É isto que faz a pergunta sumir da fila até suppress_until.
+  // Registra a resposta. E isto que faz a pergunta sumir da fila ate suppress_until.
   const recordEvent = useCallback(
     async (
       supabase: SupabaseClient,
@@ -298,17 +172,17 @@ export function useCopilot() {
       }
     ) => {
       if (!workspaceId) return
-      await supabase.from("copilot_question_events").insert({
-        workspace_id: workspaceId,
-        user_id: userId,
-        company_id: question.companyId,
-        question_key: question.key,
-        rule_id: question.ruleId,
+      await recordCopilotEvent(supabase, {
+        workspaceId,
+        userId,
+        companyId: question.companyId,
+        questionKey: question.key,
+        ruleId: question.ruleId,
         status: params.status,
-        action_id: params.actionId ?? null,
-        answer_text: params.answerText ?? null,
-        applied: params.applied ?? null,
-        suppress_until: format(addDays(new Date(), params.suppressDays), DATE_FMT),
+        suppressDays: params.suppressDays,
+        actionId: params.actionId,
+        answerText: params.answerText,
+        applied: params.applied,
       })
     },
     [workspaceId]
