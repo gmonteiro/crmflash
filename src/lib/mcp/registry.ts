@@ -1,6 +1,10 @@
 import { z } from "zod"
 import type { McpIdentity } from "./identity"
 import { pipelineOverview } from "./tools/pipeline-overview"
+import { whatsStuck } from "./tools/whats-stuck"
+import { companySituation } from "./tools/company-situation"
+import { agenda } from "./tools/agenda"
+import { search } from "./tools/search"
 
 export interface McpTool<S extends z.ZodType = z.ZodType> {
   name: string
@@ -25,7 +29,15 @@ export type AnyMcpTool = {
   handler(identity: McpIdentity, args: never): Promise<unknown>
 }
 
-export const TOOLS: AnyMcpTool[] = [pipelineOverview]
+// Ordem importa: o Claude lê o tools/list de cima para baixo, e whats_stuck é a
+// porta de entrada pretendida.
+export const TOOLS: AnyMcpTool[] = [
+  whatsStuck,
+  companySituation,
+  pipelineOverview,
+  agenda,
+  search,
+]
 
 export function findTool(name: string): AnyMcpTool | undefined {
   return TOOLS.find((t) => t.name === name)
