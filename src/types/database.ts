@@ -304,3 +304,22 @@ export interface CompanyOwner {
   company_id: string
   user_id: string
 }
+
+export interface McpOAuthClient {
+  client_id: string
+  client_name: string
+  redirect_uris: string[]
+  created_at: string
+}
+
+export interface McpOAuthToken {
+  id: string
+  client_id: string
+  user_id: string
+  workspace_id: string
+  expires_at: string
+  refresh_expires_at: string | null
+  revoked_at: string | null
+  last_used_at: string | null
+  created_at: string
+}
