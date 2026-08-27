@@ -4,7 +4,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 import { Plug } from "lucide-react"
+import { formatDistanceToNow } from "date-fns"
+import { ptBR } from "date-fns/locale"
 import { useMcpConnections } from "@/hooks/use-mcp-connections"
+
+// Data seca não serve aqui: o token dura 1h e rotaciona, então "usado em
+// 27/08" seria a resposta quase sempre e não diria se a conexão ainda está
+// viva. A pergunta que a tela responde é "isso ainda está sendo usado?".
+function relativo(iso: string): string {
+  return formatDistanceToNow(new Date(iso), { addSuffix: true, locale: ptBR })
+}
 
 export function McpConnectionsCard() {
   const { connections, loading, revoke } = useMcpConnections()
@@ -45,9 +54,8 @@ export function McpConnectionsCard() {
               <p className="truncate text-sm font-medium">{c.clientName}</p>
               <p className="text-xs text-muted-foreground">
                 Autorizado em {new Date(c.createdAt).toLocaleDateString("pt-BR")}
-                {c.lastUsedAt
-                  ? ` · usado em ${new Date(c.lastUsedAt).toLocaleDateString("pt-BR")}`
-                  : " · nunca usado"}
+                {" · "}
+                {c.lastUsedAt ? `usado ${relativo(c.lastUsedAt)}` : "nunca usado"}
               </p>
             </div>
             <Button variant="outline" size="sm" onClick={() => handleRevoke(c.id, c.clientName)}>
