@@ -1,7 +1,7 @@
 # CRMFlash — Servidor MCP
 
 **Data:** 2026-08-27
-**Status:** design aprovado, aguardando plano de implementação
+**Status:** Fatia 1 implementada e verificada contra o banco. Fatia 2 (OAuth) pendente.
 
 ## Problema
 
@@ -28,9 +28,13 @@ pelo app.
 - **RLS por workspace, já em produção.** `current_workspace()` é `SECURITY
   DEFINER` e lê `auth.uid()`. Todas as policies escopam por ela.
   `scripts/verify-workspace-rls.mjs` verifica isso hoje.
-- **Chaves Supabase no esquema legado.** A anon key é um JWT `HS256`
-  (`role: anon`, exp 2036). Existe portanto um JWT secret simétrico no
-  dashboard — é o que torna possível assinar tokens próprios.
+- **O projeto assina com chave assimétrica.** A chave corrente é ECC P-256
+  (`kid 7c25a0d6-…`) e a Supabase não exporta a parte privada. O segredo HS256
+  legado ainda existe, mas em "Previously used keys", com instrução de revogar.
+  **Não dá para assinar um JWT nós mesmos** — só cunhar sessão pelo admin API.
+  (A anon key continua sendo um JWT HS256 legado; isso não diz nada sobre a
+  chave que assina as sessões, e confundir as duas foi o erro que este design
+  cometeu na primeira versão.)
 - **Derivações de pipeline já centralizadas em `src/lib/pipeline/`:**
   `fetchPipelineSnapshot()`, `detectQuestions()`, `buildCompanyQueue()`,
   `computePipelineMetrics()`, `applyStageMove()`, `inferDirection()`,
@@ -65,7 +69,7 @@ pelo app.
 | Escopo | Leitura **e** escrita | Ler sem poder registrar não tira nenhum passo do app |
 | Hospedagem | `/api/mcp` no próprio Next.js, na Vercel | Uma base, um deploy; libera celular e qualquer máquina |
 | Autenticação | **OAuth 2.1** | É a única forma de o claude.ai (web e celular) conectar; não há onde colar Bearer lá |
-| Acesso ao banco | **JWT Supabase assinado pelo servidor** (`sub = user_id`) | A RLS que já existe passa a escopar toda tool; filtro esquecido deixa de ser vazamento |
+| Acesso ao banco | **Sessão Supabase cunhada pelo servidor** (admin API) | A RLS que já existe passa a escopar toda tool; filtro esquecido deixa de ser vazamento |
 | Cadastro novo | `find_or_create`, com o dedup do wizard de import | Narrar reunião de empresa nova não pode exigir abrir o app |
 | Interpretação de texto livre | **Fora** | O cliente já é o Claude; passar por Haiku interpretaria duas vezes |
 | Exclusão | Nenhuma tool apaga | Erro do modelo se desfaz no app; o inverso não |
@@ -81,23 +85,29 @@ pergunta reaparece" — produz um segundo CRM, divergente do primeiro, dentro do
 mesmo repositório. É exatamente o que `src/lib/pipeline/` foi extraído para
 evitar.
 
-### Por que JWT assinado e não service role
+### Por que sessão cunhada e não service role
 
 O `/api/integration/*` usa service role e escopa na mão. Funciona porque são
 três rotas de forma conhecida. Numa superfície de 14 tools com escrita, um
 `.eq("workspace_id", …)` esquecido é vazamento entre workspaces, e nenhum teste
 existente pega.
 
-Assinando um JWT com `sub = user_id` e `role: authenticated`, `auth.uid()` e
-`current_workspace()` voltam a funcionar. Três consequências:
+Cunhando uma sessão real pelo admin API — `generate_link` seguido de `verify` —
+o token sai assinado pela chave **corrente** do projeto, e `auth.uid()` e
+`current_workspace()` funcionam nativamente. Três consequências:
 
 1. A RLS escopa toda query sem a tool pedir.
 2. `user_id` nos INSERTs sai correto — a autoria na timeline funciona de graça.
 3. `verify-workspace-rls.mjs` passa a cobrir o caminho do MCP.
 
-A alternativa de guardar a sessão Supabase do usuário foi descartada: o refresh
-token do Supabase rotaciona a cada uso, então MCP e navegador brigariam pela
-mesma sessão e um derrubaria o outro.
+A alternativa de **assinar** o JWT nós mesmos morreu quando o projeto migrou para
+chaves assimétricas. E reaproveitar a sessão do navegador nunca serviu: o refresh
+token rotaciona a cada uso, então MCP e navegador brigariam pela mesma sessão.
+Cunhar resolve os dois — é uma sessão independente, assinada pela chave corrente.
+
+Custo: cada `verify` cria uma linha em `auth.sessions`. Por isso `session.ts`
+mantém cache de processo e renova por refresh token, cunhando do zero só quando
+não há o que renovar.
 
 ## Arquitetura
 
@@ -107,8 +117,8 @@ mesma sessão e um derrubaria o outro.
 src/lib/mcp/registry.ts    catálogo: nome, descrição, schema zod, handler
 src/lib/mcp/tools/*.ts     uma tool por arquivo
         ↓
-src/lib/mcp/identity.ts    token → { userId, workspaceId, supabaseJwt }
-src/lib/mcp/jwt.ts         assina o JWT curto com SUPABASE_JWT_SECRET
+src/lib/mcp/identity.ts    token → { userId, workspaceId, supabase }
+src/lib/mcp/session.ts     cunha e renova a sessão pelo admin API
         ↓
 src/lib/pipeline/*         o que já existe
 ```
@@ -267,6 +277,6 @@ do desenho que não tem como ser consertada depois do incidente.
 
 ## Insumos pendentes
 
-1. **`SUPABASE_JWT_SECRET`** — Dashboard → Project Settings → API → JWT
-   Settings → JWT Secret. Vai em `.env.local` e nas env vars da Vercel.
-   Necessário só na fatia 2.
+Nenhum. O desenho original dependia de um `SUPABASE_JWT_SECRET` que não existe
+mais como chave ativa; cunhar a sessão usa a service role key, que já está
+configurada.
