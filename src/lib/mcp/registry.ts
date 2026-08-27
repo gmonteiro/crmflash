@@ -5,6 +5,9 @@ import { whatsStuck } from "./tools/whats-stuck"
 import { companySituation } from "./tools/company-situation"
 import { agenda } from "./tools/agenda"
 import { search } from "./tools/search"
+import { logActivity } from "./tools/log-activity"
+import { setNextStep } from "./tools/set-next-step"
+import { completeNextStep } from "./tools/complete-next-step"
 
 export interface McpTool<S extends z.ZodType = z.ZodType> {
   name: string
@@ -37,6 +40,9 @@ export const TOOLS: AnyMcpTool[] = [
   pipelineOverview,
   agenda,
   search,
+  logActivity,
+  setNextStep,
+  completeNextStep,
 ]
 
 export function findTool(name: string): AnyMcpTool | undefined {
