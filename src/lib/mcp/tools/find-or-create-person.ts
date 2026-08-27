@@ -1,4 +1,5 @@
 import { z } from "zod"
+import type { SupabaseClient } from "@supabase/supabase-js"
 import { personDedupKey } from "@/lib/import/dedup-key"
 import type { McpTool } from "../registry"
 
@@ -28,18 +29,15 @@ export const findOrCreatePerson: McpTool<typeof input> = {
     "sempre que souber, ou a mesma pessoa vira dois cadastros.",
   input,
   async handler({ supabase, workspaceId, userId }, args) {
+    // dedup_key é coluna gerada (migration 015) com índice ÚNICO em
+    // (workspace_id, dedup_key). Consultar por ela é a única busca que não pode
+    // divergir do que o banco considera duplicata — buscar por nome e comparar
+    // depois erraria em homônimo além do limite, ou em nome com % e _, e aí o
+    // insert bateria no índice e a tool estouraria em vez de deduplicar.
     const key = personDedupKey(args)
 
-    const { data: candidates } = await supabase
-      .from("people")
-      .select("id, full_name, first_name, last_name, current_title, current_company")
-      .ilike("full_name", `${args.first_name} ${args.last_name}`)
-      .limit(50)
-
-    const match = (candidates ?? []).find(
-      (p) => personDedupKey(p as Parameters<typeof personDedupKey>[0]) === key
-    )
-    if (match) return { created: false, person_id: match.id, name: match.full_name }
+    const existing = await findByDedupKey(supabase, key)
+    if (existing) return { created: false, ...existing }
 
     const { data: inserted, error } = await supabase
       .from("people")
@@ -56,8 +54,30 @@ export const findOrCreatePerson: McpTool<typeof input> = {
       .select("id, full_name")
       .single()
 
-    if (error) throw new Error(`Não consegui criar a pessoa: ${error.message}`)
+    if (error) {
+      // 23505 = unique_violation. Alguém inseriu entre a busca e o insert, ou a
+      // pessoa existe num estado que a busca não alcançou. Nos dois casos o
+      // destino certo é a linha que já está lá, não um erro na cara do usuário.
+      if (error.code === "23505") {
+        const raced = await findByDedupKey(supabase, key)
+        if (raced) return { created: false, ...raced }
+      }
+      throw new Error(`Não consegui criar a pessoa: ${error.message}`)
+    }
 
     return { created: true, person_id: inserted.id, name: inserted.full_name }
   },
+}
+
+async function findByDedupKey(
+  supabase: SupabaseClient,
+  key: string
+): Promise<{ person_id: string; name: string } | null> {
+  const { data } = await supabase
+    .from("people")
+    .select("id, full_name")
+    .eq("dedup_key", key)
+    .maybeSingle()
+
+  return data ? { person_id: data.id, name: data.full_name } : null
 }

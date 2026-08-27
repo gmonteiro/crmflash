@@ -222,7 +222,7 @@ de validade; refresh rotativo.
 
 ### Tabelas
 
-Três, na migração `015_mcp_oauth.sql`:
+Três, na migração `016_mcp_oauth.sql` (o 015 foi usado pelo dedup_key do import):
 
 - `mcp_oauth_clients` — clientes registrados (`client_id`, `redirect_uris`,
   `client_name`)

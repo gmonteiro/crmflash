@@ -280,7 +280,7 @@ coisa que aparece ao abrir o CRM.
   `no_next_step` (90), `frozen_candidate` (85), `stalled_card` (80),
   `no_signal_past_stage` (70), `exit_criteria_unmet` (60), `missing_champion` (50),
   `missing_pain_hypothesis` (40)
-- Teto de `COPILOT_MAX_PER_COMPANY` (2) por empresa e `COPILOT_DAILY_LIMIT` (10) no total
+- Teto de `COPILOT_MAX_PER_COMPANY` (4) pendências por empresa e `COPILOT_DAILY_LIMIT` (6) empresas no dia
 - Estagios terminais (Ganho/Perdido/Gelado) nao geram pergunta
 
 ### 11.2 Derivacoes compartilhadas (`src/lib/pipeline/`)

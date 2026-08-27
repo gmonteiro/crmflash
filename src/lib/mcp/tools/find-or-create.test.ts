@@ -31,3 +31,26 @@ describe("find_or_create_person", () => {
     ).toBe(true)
   })
 })
+
+describe("find_or_create_person — busca pela chave do banco", () => {
+  it("consulta por dedup_key, nao por nome", async () => {
+    const { client, calls } = fakeSupabase({
+      people: [{ id: "pe-1", full_name: "Ana Silva" }],
+    })
+
+    const out = await findOrCreatePerson.handler(identity(client), {
+      first_name: "Ana",
+      last_name: "Silva",
+      current_title: "CTO",
+      current_company: "Acme",
+      company_id: null,
+      email: null,
+    })
+
+    expect(out).toMatchObject({ created: false, person_id: "pe-1" })
+    const query = calls.find((c) => c.table === "people")
+    // A chave exata, igual a coluna gerada da migration 015.
+    expect(query!.filters).toEqual({ dedup_key: "ana|silva|cto|acme" })
+    expect(calls.some((c) => c.op === "insert")).toBe(false)
+  })
+})
