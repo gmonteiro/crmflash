@@ -1,7 +1,16 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-const publicRoutes = ['/login', '/signup', '/auth/callback', '/api/integration']
+// "Público" aqui significa "não autentica por cookie de sessão" — não que seja
+// aberto. /api/integration valida segredo compartilhado e /api/mcp valida Bearer
+// na própria rota; deixar o middleware barrá-los faria o handler nunca rodar.
+const publicRoutes = [
+  '/login',
+  '/signup',
+  '/auth/callback',
+  '/api/integration',
+  '/api/mcp',
+]
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
