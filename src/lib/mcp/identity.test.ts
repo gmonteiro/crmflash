@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from "vitest"
-import { extractBearer, resolveWorkspaceId } from "./identity"
+import { extractBearer, resolveWorkspaceId, matchesDevToken } from "./identity"
 import { fakeSupabase } from "./fake-supabase"
 
 beforeAll(() => {
@@ -44,5 +44,23 @@ describe("resolveWorkspaceId", () => {
   it("devolve null quando o usuário não é membro de nada", async () => {
     const { client } = fakeSupabase({ workspace_members: [] })
     expect(await resolveWorkspaceId(client, "user-1")).toBeNull()
+  })
+})
+
+describe("matchesDevToken", () => {
+  it("não vale nada quando MCP_DEV_TOKEN não está configurado", () => {
+    delete process.env.MCP_DEV_TOKEN
+    expect(matchesDevToken("qualquer-coisa")).toBe(false)
+  })
+
+  it("compara com o valor configurado", () => {
+    process.env.MCP_DEV_TOKEN = "token-de-dev"
+    expect(matchesDevToken("token-de-dev")).toBe(true)
+    expect(matchesDevToken("outro")).toBe(false)
+  })
+
+  it("recusa token de tamanho diferente sem estourar", () => {
+    process.env.MCP_DEV_TOKEN = "token-de-dev"
+    expect(matchesDevToken("x")).toBe(false)
   })
 })

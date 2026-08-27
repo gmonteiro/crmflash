@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "crypto"
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
 import { getAccessToken } from "./session"
+import { lookupAccessToken } from "@/lib/oauth/store"
 
 export interface McpIdentity {
   userId: string
@@ -26,25 +27,17 @@ function constantTimeEquals(a: string, b: string): boolean {
   return timingSafeEqual(bufA, bufB)
 }
 
-/**
- * Token → identidade.
- *
- * Fatia 1: token único de desenvolvimento, em env var. A Fatia 2 troca só o
- * corpo desta função por uma consulta em mcp_oauth_tokens — o transporte e as
- * 14 tools não sabem qual das duas está ativa, e por isso não mudam.
- */
-export async function resolveIdentity(request: Request): Promise<McpIdentity | null> {
-  const token = extractBearer(request)
-  if (!token) return null
-
+/** Separada para teste: a comparação em tempo constante não é observável de fora. */
+export function matchesDevToken(token: string): boolean {
   const expected = process.env.MCP_DEV_TOKEN
-  const userId = process.env.MCP_DEV_USER_ID
-  if (!expected || !userId) return null
-  if (!constantTimeEquals(token, expected)) return null
+  if (!expected) return false
+  return constantTimeEquals(token, expected)
+}
 
-  // Sessão real, assinada pela chave corrente do projeto — ver session.ts.
+/** Cliente autenticado COMO o usuário — ver session.ts. A RLS escopa o resto. */
+async function clientForUser(userId: string): Promise<SupabaseClient> {
   const accessToken = await getAccessToken(userId)
-  const supabase = createClient(
+  return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -52,11 +45,38 @@ export async function resolveIdentity(request: Request): Promise<McpIdentity | n
       auth: { persistSession: false, autoRefreshToken: false },
     }
   )
+}
 
-  const workspaceId = await resolveWorkspaceId(supabase, userId)
+/**
+ * Token → identidade.
+ *
+ * Dois caminhos: token OAuth (produção) e o token de desenvolvimento em env
+ * var (atalho local). O transporte e as 14 tools não sabem qual está ativo.
+ */
+export async function resolveIdentity(request: Request): Promise<McpIdentity | null> {
+  const token = extractBearer(request)
+  if (!token) return null
+
+  // OAuth primeiro: é o caminho de produção. Deixar o token de dev em segundo
+  // lugar garante que ele nunca sombreie um token real — e em produção ele
+  // sequer existe, porque MCP_DEV_TOKEN não vai para lá.
+  const granted = await lookupAccessToken(token)
+  if (granted) {
+    return {
+      userId: granted.userId,
+      workspaceId: granted.workspaceId,
+      supabase: await clientForUser(granted.userId),
+    }
+  }
+
+  const devUserId = process.env.MCP_DEV_USER_ID
+  if (!devUserId || !matchesDevToken(token)) return null
+
+  const supabase = await clientForUser(devUserId)
+  const workspaceId = await resolveWorkspaceId(supabase, devUserId)
   if (!workspaceId) return null
 
-  return { userId, workspaceId, supabase }
+  return { userId: devUserId, workspaceId, supabase }
 }
 
 /**
