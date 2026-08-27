@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner"
 import { Sparkles, Palette, Key } from "lucide-react"
 import { WorkspaceCard } from "@/components/settings/workspace-card"
+import { McpConnectionsCard } from "@/components/settings/mcp-connections-card"
 
 type KeyStatus = Record<"openai" | "anthropic" | "perplexity" | "exa", boolean>
 
@@ -52,6 +53,8 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6 max-w-2xl">
       <WorkspaceCard />
+
+      <McpConnectionsCard />
 
       <h1 className="text-2xl font-bold">Settings</h1>
 
