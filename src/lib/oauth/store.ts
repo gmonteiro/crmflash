@@ -70,14 +70,6 @@ export function buildTokenRows(params: IssueTokensParams, now = new Date()) {
   }
 }
 
-export function isUsable(
-  row: { expires_at: string; revoked_at: string | null },
-  now = new Date()
-): boolean {
-  if (row.revoked_at) return false
-  return new Date(row.expires_at).getTime() > now.getTime()
-}
-
 export async function registerClient(
   name: string,
   redirectUris: string[]
@@ -203,28 +195,37 @@ export async function rotateRefresh(refreshToken: string): Promise<TokenPair | n
   })
 }
 
+/**
+ * Valida o token e marca o uso numa tacada só.
+ *
+ * É um UPDATE com a validade no WHERE, não um SELECT seguido de UPDATE. Dois
+ * motivos. Uma ida ao banco em vez de duas, no caminho quente de toda
+ * requisição do MCP. E porque a versão anterior — `void supabase...update()` —
+ * simplesmente não escrevia: o builder do supabase-js só dispara a requisição
+ * quando alguém chama .then(), então descartá-lo monta a query e não manda
+ * nada. Em serverless o fire-and-forget também não serviria, porque a
+ * instância congela assim que a resposta sai.
+ *
+ * Token expirado ou revogado não casa com o WHERE, então não volta linha e
+ * também não tem o uso registrado.
+ */
 export async function lookupAccessToken(
   accessToken: string
 ): Promise<{ userId: string; workspaceId: string } | null> {
   if (!accessToken) return null
 
-  const supabase = adminClient()
-  const hash = hashToken(accessToken)
+  const now = new Date().toISOString()
 
-  const { data } = await supabase
+  const { data } = await adminClient()
     .from("mcp_oauth_tokens")
-    .select("id, user_id, workspace_id, expires_at, revoked_at")
-    .eq("access_token_hash", hash)
+    .update({ last_used_at: now })
+    .eq("access_token_hash", hashToken(accessToken))
+    .is("revoked_at", null)
+    .gt("expires_at", now)
+    .select("user_id, workspace_id")
     .maybeSingle()
 
-  if (!data || !isUsable(data)) return null
-
-  // Alimenta a coluna "último uso" da tela de conexões. Sem await: o usuário
-  // não deve esperar por telemetria.
-  void supabase
-    .from("mcp_oauth_tokens")
-    .update({ last_used_at: new Date().toISOString() })
-    .eq("id", data.id)
+  if (!data) return null
 
   return { userId: data.user_id, workspaceId: data.workspace_id }
 }

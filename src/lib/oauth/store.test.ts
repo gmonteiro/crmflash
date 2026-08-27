@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { buildCodeRow, buildTokenRows, isUsable } from "./store"
+import { buildCodeRow, buildTokenRows } from "./store"
 import { hashToken } from "./crypto"
 
 const NOW = new Date("2026-08-27T12:00:00Z")
@@ -54,19 +54,3 @@ describe("buildTokenRows", () => {
   })
 })
 
-describe("isUsable", () => {
-  const future = new Date(NOW.getTime() + 1000).toISOString()
-  const past = new Date(NOW.getTime() - 1000).toISOString()
-
-  it("aceita token vivo e não revogado", () => {
-    expect(isUsable({ expires_at: future, revoked_at: null }, NOW)).toBe(true)
-  })
-
-  it("recusa token expirado", () => {
-    expect(isUsable({ expires_at: past, revoked_at: null }, NOW)).toBe(false)
-  })
-
-  it("recusa token revogado, mesmo dentro da validade", () => {
-    expect(isUsable({ expires_at: future, revoked_at: past }, NOW)).toBe(false)
-  })
-})

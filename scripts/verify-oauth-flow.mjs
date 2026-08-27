@@ -192,6 +192,31 @@ try {
     `HTTP ${mcp.status}`
   )
 
+  // last_used_at só é escrito porque o lookup é um UPDATE. A versão anterior
+  // montava o update e descartava o builder, então nunca mandava a requisição —
+  // e a coluna "último uso" da tela de conexões ficava eternamente vazia.
+  const used = await (
+    await admin(
+      `/rest/v1/mcp_oauth_tokens?select=last_used_at&client_id=eq.${clientId}&order=created_at.desc&limit=1`
+    )
+  ).json()
+  check("o uso do token é registrado", Boolean(used[0]?.last_used_at), used[0]?.last_used_at ?? "null")
+
+  console.log("\n== token expirado ==")
+  const expired = randomBytes(32).toString("base64url")
+  await admin("/rest/v1/mcp_oauth_tokens", {
+    method: "POST",
+    body: JSON.stringify({
+      client_id: clientId,
+      user_id: userId,
+      workspace_id: workspaceId,
+      access_token_hash: createHash("sha256").update(expired).digest("hex"),
+      expires_at: new Date(Date.now() - 1000).toISOString(),
+    }),
+  })
+  const expiredRes = await mcpReq(expired)
+  check("token expirado é recusado", expiredRes.status === 401, `HTTP ${expiredRes.status}`)
+
   console.log("\n== rotação e revogação ==")
   const refreshed = await tokenReq({
     grant_type: "refresh_token",
