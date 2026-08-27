@@ -8,6 +8,9 @@ import { search } from "./tools/search"
 import { logActivity } from "./tools/log-activity"
 import { setNextStep } from "./tools/set-next-step"
 import { completeNextStep } from "./tools/complete-next-step"
+import { moveStage } from "./tools/move-stage"
+import { captureSignal } from "./tools/capture-signal"
+import { setCompanyContext } from "./tools/set-company-context"
 
 export interface McpTool<S extends z.ZodType = z.ZodType> {
   name: string
@@ -43,6 +46,9 @@ export const TOOLS: AnyMcpTool[] = [
   logActivity,
   setNextStep,
   completeNextStep,
+  moveStage,
+  captureSignal,
+  setCompanyContext,
 ]
 
 export function findTool(name: string): AnyMcpTool | undefined {
