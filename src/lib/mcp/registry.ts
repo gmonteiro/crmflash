@@ -12,6 +12,8 @@ import { moveStage } from "./tools/move-stage"
 import { captureSignal } from "./tools/capture-signal"
 import { setCompanyContext } from "./tools/set-company-context"
 import { answerCopilotQuestion } from "./tools/answer-copilot-question"
+import { findOrCreateCompany } from "./tools/find-or-create-company"
+import { findOrCreatePerson } from "./tools/find-or-create-person"
 
 export interface McpTool<S extends z.ZodType = z.ZodType> {
   name: string
@@ -51,6 +53,8 @@ export const TOOLS: AnyMcpTool[] = [
   captureSignal,
   setCompanyContext,
   answerCopilotQuestion,
+  findOrCreateCompany,
+  findOrCreatePerson,
 ]
 
 export function findTool(name: string): AnyMcpTool | undefined {

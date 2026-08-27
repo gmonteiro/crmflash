@@ -26,3 +26,9 @@ describe("registry", () => {
     expect(overview!.inputSchema).toHaveProperty("type", "object")
   })
 })
+
+describe("cobertura da spec", () => {
+  it("tem as 14 tools da spec", () => {
+    expect(TOOLS).toHaveLength(14)
+  })
+})

@@ -7,6 +7,7 @@ import { parseCsv, type ParseResult } from "@/lib/import/parse-csv"
 import { parseXlsx } from "@/lib/import/parse-xlsx"
 import { autoMapColumns } from "@/lib/import/map-columns"
 import { validateRow, type RowValidation } from "@/lib/import/validate-row"
+import { personDedupKey } from "@/lib/import/dedup-key"
 
 export type ImportStep = "upload" | "mapping" | "validating" | "preview" | "executing" | "done"
 
@@ -49,12 +50,7 @@ export function useImport() {
         const seenKeys = new Set<string>()
         for (const v of validationResults) {
           if (!v.valid) continue
-          const key = [
-            (v.data.first_name || ""),
-            (v.data.last_name || ""),
-            (v.data.current_title || ""),
-            (v.data.current_company || ""),
-          ].map((s) => s.toLowerCase().trim()).join("|")
+          const key = personDedupKey(v.data)
           if (seenKeys.has(key)) {
             v.valid = false
             v.errors.push(`Duplicate: "${v.data.first_name} ${v.data.last_name}" already appears in this file`)
@@ -115,12 +111,7 @@ export function useImport() {
 
     if (allPeople) {
       for (const p of allPeople) {
-        const key = [
-          (p.first_name || ""),
-          (p.last_name || ""),
-          (p.current_title || ""),
-          (p.current_company || ""),
-        ].map((s) => s.toLowerCase().trim()).join("|")
+        const key = personDedupKey(p)
         existingIds.set(key, p.id)
       }
     }
@@ -128,12 +119,7 @@ export function useImport() {
     let skippedCount = 0
     const coOwnedIds = new Set<string>()
     const deduplicatedRows = validRows.filter((v) => {
-      const key = [
-        (v.data.first_name || ""),
-        (v.data.last_name || ""),
-        (v.data.current_title || ""),
-        (v.data.current_company || ""),
-      ].map((s) => s.toLowerCase().trim()).join("|")
+      const key = personDedupKey(v.data)
       const existingId = existingIds.get(key)
       if (existingId) {
         coOwnedIds.add(existingId)
