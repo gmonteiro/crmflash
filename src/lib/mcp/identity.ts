@@ -1,6 +1,6 @@
 import { timingSafeEqual } from "crypto"
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
-import { signSupabaseJwt } from "./jwt"
+import { getAccessToken } from "./session"
 
 export interface McpIdentity {
   userId: string
@@ -42,24 +42,43 @@ export async function resolveIdentity(request: Request): Promise<McpIdentity | n
   if (!expected || !userId) return null
   if (!constantTimeEquals(token, expected)) return null
 
-  const jwt = await signSupabaseJwt(userId)
+  // Sessão real, assinada pela chave corrente do projeto — ver session.ts.
+  const accessToken = await getAccessToken(userId)
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
-      global: { headers: { Authorization: `Bearer ${jwt}` } },
+      global: { headers: { Authorization: `Bearer ${accessToken}` } },
       auth: { persistSession: false, autoRefreshToken: false },
     }
   )
 
-  // A RLS já filtraria sozinha, mas o workspaceId explícito é o que
-  // applyStageMove e os inserts precisam preencher.
-  const { data: member } = await supabase
+  const workspaceId = await resolveWorkspaceId(supabase, userId)
+  if (!workspaceId) return null
+
+  return { userId, workspaceId, supabase }
+}
+
+/**
+ * O workspace do usuário.
+ *
+ * O filtro por user_id é obrigatório, não defense-in-depth: a RLS de
+ * workspace_members escopa por WORKSPACE, então um membro enxerga todos os
+ * outros membros — é o que faz a tela de gestão de membros funcionar. Sem o
+ * filtro, um workspace com duas pessoas devolve duas linhas e o maybeSingle
+ * falha, derrubando a autenticação inteira.
+ *
+ * Mesma forma de getWorkspaceId em lib/workspace/server.ts.
+ */
+export async function resolveWorkspaceId(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<string | null> {
+  const { data } = await supabase
     .from("workspace_members")
     .select("workspace_id")
+    .eq("user_id", userId)
     .maybeSingle()
 
-  if (!member) return null
-
-  return { userId, workspaceId: member.workspace_id, supabase }
+  return data?.workspace_id ?? null
 }

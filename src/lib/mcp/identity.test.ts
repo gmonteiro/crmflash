@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll } from "vitest"
-import { extractBearer } from "./identity"
+import { extractBearer, resolveWorkspaceId } from "./identity"
+import { fakeSupabase } from "./fake-supabase"
 
 beforeAll(() => {
   process.env.MCP_DEV_TOKEN = "token-de-dev"
@@ -24,5 +25,24 @@ describe("extractBearer", () => {
 
   it("devolve null para Bearer sem valor", () => {
     expect(extractBearer(req({ authorization: "Bearer" }))).toBeNull()
+  })
+})
+
+describe("resolveWorkspaceId", () => {
+  it("filtra por user_id — sem isso, workspace com 2 membros derruba o login", async () => {
+    const { client, calls } = fakeSupabase({
+      workspace_members: [{ workspace_id: "ws-1" }],
+    })
+
+    const ws = await resolveWorkspaceId(client, "user-1")
+
+    expect(ws).toBe("ws-1")
+    const query = calls.find((c) => c.table === "workspace_members")
+    expect(query!.filters).toEqual({ user_id: "user-1" })
+  })
+
+  it("devolve null quando o usuário não é membro de nada", async () => {
+    const { client } = fakeSupabase({ workspace_members: [] })
+    expect(await resolveWorkspaceId(client, "user-1")).toBeNull()
   })
 })
