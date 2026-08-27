@@ -9,7 +9,8 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "verify:mcp": "node --env-file=.env.local scripts/verify-mcp-rls.mjs"
+    "verify:mcp": "node --env-file=.env.local scripts/verify-mcp-rls.mjs",
+    "verify:oauth": "node --env-file=.env.local scripts/verify-oauth-flow.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
