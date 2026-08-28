@@ -13,6 +13,7 @@ import { completeNextStep } from "./tools/complete-next-step"
 import { moveStage } from "./tools/move-stage"
 import { captureSignal } from "./tools/capture-signal"
 import { setCompanyContext } from "./tools/set-company-context"
+import { updateCompany } from "./tools/update-company"
 import { snoozeCopilotQuestion } from "./tools/snooze-copilot-question"
 import { findOrCreateCompany } from "./tools/find-or-create-company"
 import { findOrCreatePerson } from "./tools/find-or-create-person"
@@ -56,6 +57,7 @@ export const TOOLS: AnyMcpTool[] = [
   moveStage,
   captureSignal,
   setCompanyContext,
+  updateCompany,
   snoozeCopilotQuestion,
   findOrCreateCompany,
   findOrCreatePerson,
