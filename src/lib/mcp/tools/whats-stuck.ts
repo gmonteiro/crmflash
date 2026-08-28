@@ -2,7 +2,33 @@ import { z } from "zod"
 import { fetchPipelineSnapshot } from "@/lib/pipeline/snapshot"
 import { detectQuestions } from "@/lib/pipeline/rules"
 import { buildCompanyQueue } from "@/lib/pipeline/queue"
+import type { CopilotQuickAction } from "@/types/copilot"
+import { isDestructive } from "./answer-with-action"
 import type { McpTool } from "../registry"
+
+export interface OfferedAction {
+  id: string
+  label: string
+  suppress_days: number
+  /** A ação existe no app mas answer_with_action recusa: ela apaga. */
+  only_in_app: boolean
+}
+
+// Ação de rascunho fica de fora: ela só abre um painel, não escreve nada e tem
+// suppressDays 0. No chat o Claude redige o texto direto, sem tool nenhuma.
+//
+// A destrutiva CONTINUA listada, marcada. Esconder seria pior: você veria
+// quatro opções no app e três no chat, sem explicação nenhuma.
+export function offerableActions(actions: CopilotQuickAction[]): OfferedAction[] {
+  return actions
+    .filter((a) => !a.effects.some((e) => e.kind === "open_drafts"))
+    .map((a) => ({
+      id: a.id,
+      label: a.label,
+      suppress_days: a.suppressDays,
+      only_in_app: isDestructive(a),
+    }))
+}
 
 const input = z.object({
   limit: z
@@ -48,7 +74,7 @@ export const whatsStuck: McpTool<typeof input> = {
         rule_id: q.ruleId,
         title: q.title,
         subtitle: q.subtitle ?? null,
-        suggested_answers: q.actions.map((a) => ({ id: a.id, label: a.label })),
+        suggested_answers: offerableActions(q.actions),
       })),
     }))
   },
