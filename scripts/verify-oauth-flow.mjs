@@ -203,6 +203,12 @@ try {
   check("o uso do token é registrado", Boolean(used[0]?.last_used_at), used[0]?.last_used_at ?? "null")
 
   console.log("\n== token expirado ==")
+  // Uma hora, não um segundo. O expires_at é escrito com o relógio DESTA
+  // máquina e comparado com o do servidor: com margem de 1s, um desvio de
+  // relógio de pouco mais que isso faz o teste acusar buraco de segurança que
+  // não existe. Já aconteceu — a máquina estava 1,045s adiantada, e o token
+  // "expirado há 1s" ainda estava 45ms no futuro para o servidor.
+  const EXPIRED_BY_MS = 3600_000
   const expired = randomBytes(32).toString("base64url")
   await admin("/rest/v1/mcp_oauth_tokens", {
     method: "POST",
@@ -211,7 +217,7 @@ try {
       user_id: userId,
       workspace_id: workspaceId,
       access_token_hash: createHash("sha256").update(expired).digest("hex"),
-      expires_at: new Date(Date.now() - 1000).toISOString(),
+      expires_at: new Date(Date.now() - EXPIRED_BY_MS).toISOString(),
     }),
   })
   const expiredRes = await mcpReq(expired)
