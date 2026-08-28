@@ -4,6 +4,7 @@ import { pipelineOverview } from "./tools/pipeline-overview"
 import { whatsStuck } from "./tools/whats-stuck"
 import { answerWithAction } from "./tools/answer-with-action"
 import { companySituation } from "./tools/company-situation"
+import { personSituation } from "./tools/person-situation"
 import { agenda } from "./tools/agenda"
 import { search } from "./tools/search"
 import { logActivity } from "./tools/log-activity"
@@ -45,6 +46,7 @@ export const TOOLS: AnyMcpTool[] = [
   whatsStuck,
   answerWithAction,
   companySituation,
+  personSituation,
   pipelineOverview,
   agenda,
   search,

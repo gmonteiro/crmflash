@@ -28,7 +28,7 @@ describe("registry", () => {
 })
 
 describe("cobertura da spec", () => {
-  it("tem as 15 tools da spec", () => {
-    expect(TOOLS).toHaveLength(15)
+  it("tem as 16 tools da spec", () => {
+    expect(TOOLS).toHaveLength(16)
   })
 })
