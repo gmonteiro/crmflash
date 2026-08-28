@@ -9,6 +9,7 @@ import { agenda } from "./tools/agenda"
 import { search } from "./tools/search"
 import { listShortlists } from "./tools/list-shortlists"
 import { shortlistMembers } from "./tools/shortlist-members"
+import { setShortlistMembership } from "./tools/set-shortlist-membership"
 import { logActivity } from "./tools/log-activity"
 import { setNextStep } from "./tools/set-next-step"
 import { completeNextStep } from "./tools/complete-next-step"
@@ -55,6 +56,7 @@ export const TOOLS: AnyMcpTool[] = [
   search,
   listShortlists,
   shortlistMembers,
+  setShortlistMembership,
   logActivity,
   setNextStep,
   completeNextStep,
