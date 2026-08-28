@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { applyEffect } from "@/lib/pipeline/effects"
+import { suppressFromWrite } from "../suppress"
 import type { McpTool } from "../registry"
 
 const input = z.object({
@@ -14,6 +15,15 @@ const input = z.object({
         "pediu preço. false quando foi você que agiu: cobrou, mandou follow-up, ou a " +
         "reunião não aconteceu. Este campo controla o contador de dias sem contato — " +
         "marcar true por engano faz uma conta morta parecer viva."
+    ),
+  answers_question_key: z
+    .string()
+    .nullable()
+    .default(null)
+    .describe(
+      "Se esta escrita responde uma pendência de whats_stuck, copie aqui o " +
+        "question_key dela. A pergunta sai da fila na mesma chamada — não " +
+        "existe outra forma de marcá-la como tratada."
     ),
 })
 
@@ -64,10 +74,30 @@ export const logActivity: McpTool<typeof input> = {
       )
     }
 
+    // A supressão vem DEPOIS da escrita, de dentro da tool. É isso que torna
+    // impossível tirar uma pendência da fila sem ter registrado nada.
+    const suppression = args.answers_question_key
+      ? await suppressFromWrite(supabase, {
+          workspaceId,
+          userId,
+          companyId: args.company_id,
+          questionKey: args.answers_question_key,
+          applied: {
+            tool: "log_activity",
+            activity_id: inserted?.id ?? null,
+            type: args.type,
+            client_engaged: args.client_engaged,
+          },
+        })
+      : null
+
     return {
       deduplicated: false,
       activity_id: inserted?.id ?? null,
       client_event_marked: args.client_engaged,
+      ...(suppression
+        ? { suppressed: suppression.suppressed, suppress_error: suppression.reason }
+        : {}),
     }
   },
 }

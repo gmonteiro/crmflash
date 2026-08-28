@@ -32,6 +32,7 @@ describe("log_activity", () => {
       title: "Reunião de diagnóstico",
       description: null,
       client_engaged: true,
+      answers_question_key: null,
     })
 
     const update = calls.find((c) => c.table === "companies" && c.op === "update")
@@ -46,6 +47,7 @@ describe("log_activity", () => {
       title: "Cobrei, aguardando resposta",
       description: null,
       client_engaged: false,
+      answers_question_key: null,
     })
 
     expect(calls.some((c) => c.table === "companies" && c.op === "update")).toBe(false)
@@ -62,6 +64,7 @@ describe("log_activity", () => {
       title: "Reunião de diagnóstico",
       description: null,
       client_engaged: true,
+      answers_question_key: null,
     })
 
     expect(out).toMatchObject({ deduplicated: true, activity_id: "act-1" })

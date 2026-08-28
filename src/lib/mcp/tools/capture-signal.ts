@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { applyEffect } from "@/lib/pipeline/effects"
+import { suppressFromWrite } from "../suppress"
 import type { McpTool } from "../registry"
 
 const LABELS: Record<string, string> = {
@@ -23,6 +24,15 @@ const input = z.object({
       "security_process",
     ])
     .describe("O sinal de compromisso que o cliente demonstrou."),
+  answers_question_key: z
+    .string()
+    .nullable()
+    .default(null)
+    .describe(
+      "Se esta escrita responde uma pendência de whats_stuck, copie aqui o " +
+        "question_key dela. A pergunta sai da fila na mesma chamada — não " +
+        "existe outra forma de marcá-la como tratada."
+    ),
 })
 
 export const captureSignal: McpTool<typeof input> = {
@@ -40,6 +50,22 @@ export const captureSignal: McpTool<typeof input> = {
       { kind: "capture_signal", signal: args.signal, label: LABELS[args.signal] }
     )
 
-    return { captured: args.signal, label: LABELS[args.signal] }
+    const suppression = args.answers_question_key
+      ? await suppressFromWrite(supabase, {
+          workspaceId,
+          userId,
+          companyId: args.company_id,
+          questionKey: args.answers_question_key,
+          applied: { tool: "capture_signal", signal: args.signal },
+        })
+      : null
+
+    return {
+      captured: args.signal,
+      label: LABELS[args.signal],
+      ...(suppression
+        ? { suppressed: suppression.suppressed, suppress_error: suppression.reason }
+        : {}),
+    }
   },
 }

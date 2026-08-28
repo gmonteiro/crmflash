@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { applyEffect } from "@/lib/pipeline/effects"
+import { suppressFromWrite } from "../suppress"
 import type { McpTool } from "../registry"
 
 const input = z
@@ -14,6 +15,15 @@ const input = z
       .string()
       .optional()
       .describe("A dor que o cliente tem, na linguagem dele."),
+    answers_question_key: z
+      .string()
+      .nullable()
+      .default(null)
+      .describe(
+        "Se esta escrita responde uma pendência de whats_stuck, copie aqui o " +
+          "question_key dela. A pergunta sai da fila na mesma chamada — não " +
+          "existe outra forma de marcá-la como tratada."
+      ),
   })
   .refine(
     (v) => Boolean(v.champion_name || v.economic_buyer_name || v.pain_hypothesis),
@@ -48,6 +58,25 @@ export const setCompanyContext: McpTool<typeof input> = {
       written.push(field)
     }
 
-    return { updated: written }
+    // A guarda de written.length deixa a regra explícita: sem campo escrito não
+    // há trabalho, e sem trabalho não há supressão. O refine já barra o caso,
+    // mas a condição aqui é o que garante a invariante nesta tool.
+    const suppression =
+      args.answers_question_key && written.length > 0
+        ? await suppressFromWrite(supabase, {
+            workspaceId,
+            userId,
+            companyId: args.company_id,
+            questionKey: args.answers_question_key,
+            applied: { tool: "set_company_context", updated: written },
+          })
+        : null
+
+    return {
+      updated: written,
+      ...(suppression
+        ? { suppressed: suppression.suppressed, suppress_error: suppression.reason }
+        : {}),
+    }
   },
 }
