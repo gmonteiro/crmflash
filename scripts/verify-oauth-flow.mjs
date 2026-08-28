@@ -187,8 +187,8 @@ try {
   const mcp = await mcpReq(tokens.access_token)
   const mcpBody = mcp.ok ? await mcp.json() : {}
   check(
-    "tools/list responde com as 14 tools",
-    mcpBody?.result?.tools?.length === 14,
+    "tools/list responde com as 15 tools",
+    mcpBody?.result?.tools?.length === 15,
     `HTTP ${mcp.status}`
   )
 
