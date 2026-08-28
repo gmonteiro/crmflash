@@ -2,6 +2,7 @@ import { z } from "zod"
 import type { McpIdentity } from "./identity"
 import { pipelineOverview } from "./tools/pipeline-overview"
 import { whatsStuck } from "./tools/whats-stuck"
+import { answerWithAction } from "./tools/answer-with-action"
 import { companySituation } from "./tools/company-situation"
 import { agenda } from "./tools/agenda"
 import { search } from "./tools/search"
@@ -42,6 +43,7 @@ export type AnyMcpTool = {
 // porta de entrada pretendida.
 export const TOOLS: AnyMcpTool[] = [
   whatsStuck,
+  answerWithAction,
   companySituation,
   pipelineOverview,
   agenda,
