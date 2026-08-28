@@ -7,6 +7,8 @@ import { companySituation } from "./tools/company-situation"
 import { personSituation } from "./tools/person-situation"
 import { agenda } from "./tools/agenda"
 import { search } from "./tools/search"
+import { listShortlists } from "./tools/list-shortlists"
+import { shortlistMembers } from "./tools/shortlist-members"
 import { logActivity } from "./tools/log-activity"
 import { setNextStep } from "./tools/set-next-step"
 import { completeNextStep } from "./tools/complete-next-step"
@@ -51,6 +53,8 @@ export const TOOLS: AnyMcpTool[] = [
   pipelineOverview,
   agenda,
   search,
+  listShortlists,
+  shortlistMembers,
   logActivity,
   setNextStep,
   completeNextStep,
