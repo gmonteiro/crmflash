@@ -486,3 +486,14 @@ sem esse teto uma conta bagunçada monopoliza a fila inteira.
   (`people!inner(people_owners!inner(...))`) alcanca 3.044 das 3.059 empresas:
   perde as sem contato nenhum, onde o dono e so o criador — filtro discordando
   da coluna do lado.
+
+---
+
+## 2026-09-10 — Triagem por cursor
+
+- **O que:** fila de triagem no topo da aba Shortlists do `/people`. Mostra só os contatos do usuário logado, na ordem congelada do `/people` (`created_at desc, id asc`), a partir de onde ele parou. Marcar entra na "First" e encolhe a fila até o marcado.
+- **Cursor, não derivação:** `screening_cursors` guarda (`cut_created_at`, `cut_id`) por usuário. Só marcações feitas de dentro da fila movem o cursor. Marcar pelo `/people`, pelo diálogo ou pelo MCP entra na shortlist e não toca no corte. Motivo: uma marcação avulsa de 20/04 estava 265 linhas à frente de onde a triagem corrida parou.
+- **Por que não "quem marcou":** `shortlist_members` não grava quem marcou, e atribuir pelo dono falha nas 700 pessoas em comum (todas marcadas antes do Rafael existir no workspace).
+- **Ponto de partida:** Guilherme em Fátima Leal (restam 1.852), Rafael em Ricardo Paiva (restam 1.732). Seed na migração 017. Consulta conferida por REST com o filtro do corte: bate nos dois números.
+- **Ordem real da tela:** lote de 26/08 (Rafael) em cima, lote de fev/mar embaixo; dentro de um lote a ordem é por id. Congelada na fila; o `/people` continua ordenável.
+- Spec: `docs/superpowers/specs/2026-09-10-triagem-por-cursor-design.md`
