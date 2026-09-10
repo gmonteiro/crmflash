@@ -364,6 +364,12 @@ export function createSeenTracker(minDwellMs = 3000): SeenTracker {
     focus(companyId, now) {
       if (current && current.companyId === companyId) return null
 
+      // Fila esvaziou (respondeu tudo, refetch): ninguém "passou adiante".
+      if (!companyId) {
+        current = null
+        return null
+      }
+
       let left: string | null = null
       if (
         current &&
@@ -374,7 +380,7 @@ export function createSeenTracker(minDwellMs = 3000): SeenTracker {
         handled.add(left)
       }
 
-      current = companyId ? { companyId, since: now } : null
+      current = { companyId, since: now }
       return left
     },
     skip(companyId) {
