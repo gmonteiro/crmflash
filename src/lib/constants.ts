@@ -73,10 +73,27 @@ export const FROZEN_DAYS = 30
 // ---------------------------------------------------------------------------
 
 // A fila é por EMPRESA: um card por conta, com todas as pendências dela dentro.
-// COPILOT_DAILY_LIMIT conta empresas (não perguntas) e MAX_PER_COMPANY é quantas
-// pendências cabem num card — acima disso o card vira parede e ninguém responde.
+// COPILOT_MAX_PER_COMPANY é quantas pendências cabem num card — acima disso o
+// card vira parede e ninguém responde. COPILOT_DAILY_LIMIT é o teto de empresas
+// do MCP (whats_stuck): no chat a fila inteira é ruído. O painel não tem teto.
 export const COPILOT_DAILY_LIMIT = 6
 export const COPILOT_MAX_PER_COMPANY = 4
+
+// Quando você viu o card de uma conta e passou adiante sem responder (ou clicou
+// em Adiar), cada pendência some por estes dias. Proporcional à importância:
+// reunião de ontem volta amanhã, hipótese de dor espera duas semanas.
+// Semântica: suppress_until = hoje + N, escondido enquanto >= hoje. N=0 = amanhã.
+export const SEEN_SUPPRESS_DAYS: Record<CopilotRuleId, number> = {
+  meeting_yesterday: 0,
+  next_step_overdue: 0,
+  no_next_step: 2,
+  frozen_candidate: 3,
+  stalled_card: 3,
+  no_signal_past_stage: 7,
+  exit_criteria_unmet: 7,
+  missing_champion: 7,
+  missing_pain_hypothesis: 14,
+}
 
 // Quando você responde um card inteiro em texto livre, as pendências que a
 // narração NÃO resolveu por dado ficam suprimidas por estes dias: você já

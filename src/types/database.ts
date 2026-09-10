@@ -251,7 +251,7 @@ export interface CompanyNextStep {
 
 // Copiloto (migration 009). As perguntas são derivadas do estado do board; o que
 // persiste é a resposta, que também serve de supressão até suppress_until.
-export type CopilotEventStatus = 'answered' | 'snoozed' | 'dismissed'
+export type CopilotEventStatus = 'answered' | 'snoozed' | 'dismissed' | 'seen'
 
 export interface CopilotQuestionEvent {
   id: string
