@@ -25,3 +25,11 @@ export function farthest(rows: CutKey[]): CutKey {
 export function afterCutFilter(cut: CutKey): string {
   return `created_at.lt.${cut.created_at},and(created_at.eq.${cut.created_at},id.gt.${cut.id})`
 }
+
+/**
+ * Quem entrou na shortlist por esta marcação. Quem já era membro (marcado
+ * pelo /people, por exemplo) fica de fora: desfazer não pode tirá-lo.
+ */
+export function newlyAdded(ids: string[], existing: Set<string>): string[] {
+  return ids.filter((id) => !existing.has(id))
+}

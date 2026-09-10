@@ -4,11 +4,19 @@ import { useState, useEffect, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useWorkspace } from "@/lib/workspace/context"
 import { useShortlists } from "@/hooks/use-shortlists"
-import { farthest, afterCutFilter, type CutKey } from "@/lib/screening"
+import { farthest, afterCutFilter, newlyAdded, type CutKey } from "@/lib/screening"
 import { toast } from "sonner"
 import type { Person, ScreeningCursor } from "@/types/database"
 
 const PAGE_SIZE = 25
+
+/** O que uma marcação fez, para poder desfazer: só vive nesta aba aberta. */
+type UndoEntry = {
+  previousCursor: CutKey | null
+  shortlistId: string
+  shortlistName: string
+  addedIds: string[]
+}
 
 /**
  * A fila de triagem do usuário logado: os contatos de que ele é dono, na
@@ -29,6 +37,8 @@ export function useScreeningQueue() {
   const [totalCount, setTotalCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(0)
+  const [undoStack, setUndoStack] = useState<UndoEntry[]>([])
+  const [undoing, setUndoing] = useState(false)
 
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
 
@@ -127,6 +137,15 @@ export function useScreeningQueue() {
       return
     }
     const target = shortlists[shortlists.length - 1] // a mais antiga, como no /people
+    const supabase = createClient()
+
+    // Antes de adicionar: quem já era membro não sai no desfazer.
+    const { data: existingRows } = await supabase
+      .from("shortlist_members")
+      .select("person_id")
+      .eq("shortlist_id", target.id)
+      .in("person_id", ids)
+    const existing = new Set(((existingRows ?? []) as { person_id: string }[]).map((r) => r.person_id))
 
     const ok = await addMembers(target.id, ids)
     if (!ok) {
@@ -138,7 +157,6 @@ export function useScreeningQueue() {
     if (marked.length === 0) return
     const next = farthest(marked.map((p) => ({ created_at: p.created_at, id: p.id })))
 
-    const supabase = createClient()
     const { error } = await supabase
       .from("screening_cursors")
       .upsert(
@@ -152,10 +170,68 @@ export function useScreeningQueue() {
       return
     }
 
+    setUndoStack((prev) => [
+      ...prev,
+      { previousCursor: cursor, shortlistId: target.id, shortlistName: target.name, addedIds: newlyAdded(ids, existing) },
+    ])
     toast.success(`Adicionado a "${target.name}"`)
     // Trocar o cursor dispara fetchPage(0) pelo efeito acima.
     await loadCursor()
-  }, [workspaceId, userId, shortlists, addMembers, people, refetch, loadCursor])
+  }, [workspaceId, userId, shortlists, addMembers, people, cursor, refetch, loadCursor])
+
+  /**
+   * Volta a última marcação feita nesta aba: tira da shortlist quem entrou por
+   * ela e devolve o cursor para onde estava. Só o que foi feito aqui — marcar
+   * pelo /people não entra na pilha.
+   */
+  const undo = useCallback(async () => {
+    const entry = undoStack[undoStack.length - 1]
+    if (!entry || !workspaceId || !userId || undoing) return
+    setUndoing(true)
+    const supabase = createClient()
+
+    if (entry.addedIds.length > 0) {
+      const { error } = await supabase
+        .from("shortlist_members")
+        .delete()
+        .eq("shortlist_id", entry.shortlistId)
+        .in("person_id", entry.addedIds)
+      if (error) {
+        toast.error("Não deu para tirar da shortlist")
+        setUndoing(false)
+        return
+      }
+    }
+
+    const { error } = entry.previousCursor
+      ? await supabase
+          .from("screening_cursors")
+          .upsert(
+            {
+              workspace_id: workspaceId,
+              user_id: userId,
+              entity_type: "person",
+              cut_created_at: entry.previousCursor.created_at,
+              cut_id: entry.previousCursor.id,
+            },
+            { onConflict: "workspace_id,user_id,entity_type" }
+          )
+      : await supabase
+          .from("screening_cursors")
+          .delete()
+          .eq("workspace_id", workspaceId)
+          .eq("user_id", userId)
+          .eq("entity_type", "person")
+
+    if (error) {
+      toast.error(`Saiu de "${entry.shortlistName}", mas o corte não voltou`)
+    } else {
+      toast.success("Marcação desfeita")
+    }
+    setUndoStack((prev) => prev.slice(0, -1))
+    setUndoing(false)
+    await loadCursor()
+  }, [undoStack, workspaceId, userId, undoing, loadCursor])
 
   async function updatePerson(id: string, data: Partial<Person>) {
     if (!workspaceId) return false
@@ -193,6 +269,9 @@ export function useScreeningQueue() {
     cursorDeleted,
     hasCursor: cursor !== null,
     mark,
+    undo,
+    canUndo: undoStack.length > 0,
+    undoing,
     updatePerson,
     deletePerson,
     refetch,

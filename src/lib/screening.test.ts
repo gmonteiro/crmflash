@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { farthest, afterCutFilter } from "./screening"
+import { farthest, afterCutFilter, newlyAdded } from "./screening"
 
 describe("farthest", () => {
   it("escolhe o menor created_at", () => {
@@ -35,5 +35,15 @@ describe("afterCutFilter", () => {
     expect(out).toBe(
       "created_at.lt.2026-03-01T03:17:19.240507+00:00,and(created_at.eq.2026-03-01T03:17:19.240507+00:00,id.gt.3318959c-7956-4b44-8cb7-6029ce8dc73d)"
     )
+  })
+})
+
+describe("newlyAdded", () => {
+  it("tira quem ja era membro, mantendo a ordem", () => {
+    expect(newlyAdded(["a", "b", "c"], new Set(["b"]))).toEqual(["a", "c"])
+  })
+
+  it("ninguem novo devolve lista vazia", () => {
+    expect(newlyAdded(["a"], new Set(["a"]))).toEqual([])
   })
 })
