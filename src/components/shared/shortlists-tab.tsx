@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { MoreHorizontal, Pencil, Trash2, X, ListPlus, ChevronDown, ChevronUp, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import type { ShortlistEntityType, ShortlistMember } from "@/types/database"
+import { ScreeningQueue } from "@/components/people/screening-queue"
 
 interface ShortlistsTabProps {
   entityType: ShortlistEntityType
@@ -89,20 +90,21 @@ export function ShortlistsTab({ entityType }: ShortlistsTabProps) {
     )
   }
 
-  if (shortlists.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16 text-center">
-        <ListPlus className="h-12 w-12 text-muted-foreground/50 mb-4" />
-        <h3 className="text-lg font-medium mb-1">No shortlists yet</h3>
-        <p className="text-sm text-muted-foreground max-w-sm">
-          Select {entityType === "person" ? "contacts" : "companies"} from the main list using the checkboxes,
-          then click &quot;Add to Shortlist&quot; to create one.
-        </p>
-      </div>
-    )
-  }
-
   return (
+    <div className="space-y-6">
+      {/* A fila de triagem vem antes das listas: é onde o trabalho acontece. */}
+      {entityType === "person" && <ScreeningQueue />}
+
+      {shortlists.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <ListPlus className="h-12 w-12 text-muted-foreground/50 mb-4" />
+          <h3 className="text-lg font-medium mb-1">No shortlists yet</h3>
+          <p className="text-sm text-muted-foreground max-w-sm">
+            Select {entityType === "person" ? "contacts" : "companies"} from the main list using the checkboxes,
+            then click &quot;Add to Shortlist&quot; to create one.
+          </p>
+        </div>
+      ) : (
     <div className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {shortlists.map((sl) => (
@@ -255,6 +257,8 @@ export function ShortlistsTab({ entityType }: ShortlistsTabProps) {
             </Table>
           )}
         </div>
+      )}
+    </div>
       )}
     </div>
   )
