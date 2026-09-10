@@ -83,6 +83,12 @@ describe("detectQuestions — tetos", () => {
     for (const item of queue) expect(item.pendings).toHaveLength(4)
   })
 
+  it("sem limit, nenhuma empresa fica de fora", () => {
+    const ids = ["a", "b", "c", "d", "e", "f", "g", "h"]
+    const queue = buildCompanyQueue(detectQuestions(snapshot(ids), new Set()))
+    expect(queue).toHaveLength(8)
+  })
+
   it("as pendências vêm ordenadas por prioridade dentro do card", () => {
     const [item] = buildCompanyQueue(
       detectQuestions(snapshot(["a"]), new Set(), { limit: 6, maxPerCompany: 4 })

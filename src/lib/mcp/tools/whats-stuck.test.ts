@@ -1,6 +1,16 @@
 import { describe, it, expect } from "vitest"
-import { offerableActions } from "./whats-stuck"
+import { effectiveLimit, offerableActions } from "./whats-stuck"
+import { COPILOT_DAILY_LIMIT } from "@/lib/constants"
 import type { CopilotQuickAction } from "@/types/copilot"
+
+describe("effectiveLimit", () => {
+  it("sem valor, o chat usa o teto do MCP", () => {
+    expect(effectiveLimit(undefined)).toBe(COPILOT_DAILY_LIMIT)
+  })
+  it("com valor, respeita o pedido", () => {
+    expect(effectiveLimit(20)).toBe(20)
+  })
+})
 
 const ACTIONS: CopilotQuickAction[] = [
   {

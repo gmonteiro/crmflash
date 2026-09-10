@@ -8,7 +8,6 @@ import {
   SIGNAL_EXPECTED_FROM_POSITION,
   CHAMPION_EXPECTED_FROM_POSITION,
   COMMITMENT_SIGNALS,
-  COPILOT_DAILY_LIMIT,
   COPILOT_MAX_PER_COMPANY,
 } from "@/lib/constants"
 import type { CommitmentSignalType } from "@/types/database"
@@ -486,7 +485,7 @@ const RULES = [
 ] as const
 
 export interface DetectOptions {
-  /** Teto de EMPRESAS no dia (a fila é agrupada por conta). */
+  /** Teto de EMPRESAS (a fila é agrupada por conta). Sem valor, não corta. */
   limit?: number
   /** Teto de pendências por empresa — é o que cabe num card. */
   maxPerCompany?: number
@@ -500,7 +499,7 @@ export function detectQuestions(
   suppressedKeys: Set<string>,
   opts: DetectOptions = {}
 ): CopilotQuestion[] {
-  const { limit = COPILOT_DAILY_LIMIT, maxPerCompany = COPILOT_MAX_PER_COMPANY } = opts
+  const { limit = Infinity, maxPerCompany = COPILOT_MAX_PER_COMPANY } = opts
   const ctx = buildContext(snap)
   const found: CopilotQuestion[] = []
 
@@ -524,9 +523,9 @@ export function detectQuestions(
     const n = perCompany.get(q.companyId) ?? 0
     // Teto do card: acima disto a conta vira parede e ninguém responde.
     if (n >= maxPerCompany) continue
-    // Teto do dia. Só barra conta NOVA — uma empresa que já entrou continua
-    // podendo somar pendências, senão o corte cairia no meio de um card e o
-    // usuário responderia uma conta pela metade sem saber que faltava algo.
+    // Teto de empresas (só o MCP usa; o painel mostra tudo). Só barra conta
+    // NOVA — uma empresa que já entrou continua podendo somar pendências, senão
+    // o corte cairia no meio de um card.
     if (n === 0 && perCompany.size >= limit) continue
     perCompany.set(q.companyId, n + 1)
     queue.push(q)
