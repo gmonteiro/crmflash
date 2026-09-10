@@ -11,7 +11,7 @@ import { buildCompanyQueue } from "@/lib/pipeline/queue"
 import { applyEffect as applyEffectImpl } from "@/lib/pipeline/effects"
 import { recordCopilotEvent } from "@/lib/pipeline/copilot-events"
 import type { PipelineSnapshot } from "@/lib/pipeline/types"
-import { COMMITMENT_SIGNALS, NARRATION_SUPPRESS_DAYS } from "@/lib/constants"
+import { COMMITMENT_SIGNALS, NARRATION_SUPPRESS_DAYS, SEEN_SUPPRESS_DAYS } from "@/lib/constants"
 import type {
   CompanyQueueItem,
   CopilotEffect,
@@ -164,7 +164,7 @@ export function useCopilot() {
       userId: string,
       question: CopilotQuestion,
       params: {
-        status: "answered" | "snoozed" | "dismissed"
+        status: "answered" | "snoozed" | "dismissed" | "seen"
         suppressDays: number
         actionId?: string | null
         answerText?: string | null
@@ -251,7 +251,8 @@ export function useCopilot() {
     [workspaceId, recordEvent]
   )
 
-  // Adia todas as perguntas abertas até amanhã.
+  // Adia todas as contas abertas. Cada pendência volta no prazo da própria
+  // regra: reunião de ontem amanhã, hipótese de dor em duas semanas.
   const snoozeAll = useCallback(async (): Promise<boolean> => {
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -260,7 +261,10 @@ export function useCopilot() {
     const pending = questions
     setQuestions([])
     for (const q of pending) {
-      await recordEvent(supabase, user.id, q, { status: "snoozed", suppressDays: 1 })
+      await recordEvent(supabase, user.id, q, {
+        status: "snoozed",
+        suppressDays: SEEN_SUPPRESS_DAYS[q.ruleId],
+      })
     }
     return true
   }, [workspaceId, questions, recordEvent])
@@ -401,19 +405,40 @@ export function useCopilot() {
     [workspaceId, applyEffect, recordEvent, fetchQuestions]
   )
 
-  // Adiar a conta inteira: mesmo efeito de "já respondi isso hoje", só que
-  // explícito e por 1 dia, sem passar pela IA.
+  // Adiar a conta inteira: "não aconteceu nada aqui", sem passar pela IA.
+  // Mesma cadência do "visto": o que é urgente volta amanhã de qualquer jeito.
   const snoozeCompany = useCallback(
-    async (item: CompanyQueueItem, days = 1): Promise<boolean> => {
+    async (item: CompanyQueueItem): Promise<boolean> => {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user || !workspaceId) return false
 
       setQuestions((prev) => prev.filter((q) => q.companyId !== item.companyId))
       for (const pending of item.pendings) {
-        await recordEvent(supabase, user.id, pending, { status: "snoozed", suppressDays: days })
+        await recordEvent(supabase, user.id, pending, {
+          status: "snoozed",
+          suppressDays: SEEN_SUPPRESS_DAYS[pending.ruleId],
+        })
       }
       return true
+    },
+    [workspaceId, recordEvent]
+  )
+
+  // O usuário viu o card e foi para outra conta. Não mexe na fila da sessão
+  // (ele pode voltar); só no próximo load cada pendência some pelo prazo dela.
+  const markSeen = useCallback(
+    async (item: CompanyQueueItem): Promise<void> => {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user || !workspaceId) return
+
+      for (const pending of item.pendings) {
+        await recordEvent(supabase, user.id, pending, {
+          status: "seen",
+          suppressDays: SEEN_SUPPRESS_DAYS[pending.ruleId],
+        })
+      }
     },
     [workspaceId, recordEvent]
   )
@@ -430,6 +455,7 @@ export function useCopilot() {
     applyProposal,
     snooze,
     snoozeCompany,
+    markSeen,
     snoozeAll,
     dismiss,
   }
