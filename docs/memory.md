@@ -445,6 +445,23 @@ sem esse teto uma conta bagunçada monopoliza a fila inteira.
   `queue.test.ts` e `rules.test.ts` (tetos, ordem, supressao).
 - **Design completo:** `docs/superpowers/specs/2026-08-20-copiloto-fila-por-empresa-design.md`
 
+## Copiloto: fila inteira (2026-09-10)
+
+- **Sintoma:** "so mostra 6 na fila e a cada refresh aparece mais". Era
+  `COPILOT_DAILY_LIMIT` escondendo o resto; cada resposta liberava uma vaga.
+- **Decisao:** painel sem teto de empresas (`detectQuestions` default
+  `Infinity`); `whats_stuck` continua em 6 por default (`effectiveLimit`).
+- **Nao cobrar sempre:** status `seen` (migration 018). O painel grava quando o
+  card ficou >= 3 s na tela e o usuario clicou em outra conta
+  (`seen-tracker.ts`, puro, relogio injetado). Cada pendencia some por
+  `SEEN_SUPPRESS_DAYS[ruleId]`: 0 (reuniao, passo vencido) a 14 (dor).
+  "Adiar conta"/"Adiar tudo" usam a mesma tabela; deixaram de ser 1 dia fixo.
+- **Semantica de N:** `suppress_until = hoje + N`, escondido enquanto `>= hoje`.
+  N=0 volta amanha. O "adiar para amanha" antigo (N=1) escondia por dois dias.
+- **Lateral:** lista inteira com rolagem e divisor Hoje (prioridade >= 80) /
+  Quando der.
+- **Design:** `docs/superpowers/specs/2026-09-10-copiloto-fila-inteira-design.md`
+
 ## Donos de contato (2026-08-24)
 
 - **Problema:** depois da 010 `user_id` virou autoria ("quem criou a linha") e
