@@ -18,6 +18,8 @@ interface ColumnOptions {
   sortBy?: string
   sortDirection?: "asc" | "desc"
   onSortChange: (column: string) => void
+  /** false na fila de triagem: a ordem lá é congelada e o cabeçalho não pode sugerir o contrário. */
+  sortable?: boolean
   shortlistsByPerson?: Record<string, { id: string; name: string }[]>
   ownersByPerson?: Record<string, string[]>
   memberEmails?: Record<string, string>
@@ -29,13 +31,16 @@ function SortHeader({
   sortBy,
   sortDirection,
   onSortChange,
+  sortable = true,
 }: {
   label: string
   column: string
   sortBy?: string
   sortDirection?: "asc" | "desc"
   onSortChange: (column: string) => void
+  sortable?: boolean
 }) {
+  if (!sortable) return <span>{label}</span>
   const active = sortBy === column
   const Icon = active ? (sortDirection === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown
   return (
@@ -51,7 +56,7 @@ function SortHeader({
   )
 }
 
-export function getPeopleColumns({ onUpdate, onDelete, sortBy, sortDirection, onSortChange, shortlistsByPerson, ownersByPerson, memberEmails }: ColumnOptions): ColumnDef<Person>[] {
+export function getPeopleColumns({ onUpdate, onDelete, sortBy, sortDirection, onSortChange, sortable = true, shortlistsByPerson, ownersByPerson, memberEmails }: ColumnOptions): ColumnDef<Person>[] {
   return [
     {
       id: "select",
@@ -79,7 +84,7 @@ export function getPeopleColumns({ onUpdate, onDelete, sortBy, sortDirection, on
     {
       accessorKey: "full_name",
       header: () => (
-        <SortHeader label="Name" column="full_name" sortBy={sortBy} sortDirection={sortDirection} onSortChange={onSortChange} />
+        <SortHeader label="Name" column="full_name" sortBy={sortBy} sortDirection={sortDirection} onSortChange={onSortChange} sortable={sortable} />
       ),
       cell: ({ row }) => {
         const person = row.original
@@ -106,7 +111,7 @@ export function getPeopleColumns({ onUpdate, onDelete, sortBy, sortDirection, on
     {
       accessorKey: "current_title",
       header: () => (
-        <SortHeader label="Title" column="current_title" sortBy={sortBy} sortDirection={sortDirection} onSortChange={onSortChange} />
+        <SortHeader label="Title" column="current_title" sortBy={sortBy} sortDirection={sortDirection} onSortChange={onSortChange} sortable={sortable} />
       ),
       cell: ({ row }) => (
         <div data-stop-propagation>
@@ -120,7 +125,7 @@ export function getPeopleColumns({ onUpdate, onDelete, sortBy, sortDirection, on
     {
       accessorKey: "current_company",
       header: () => (
-        <SortHeader label="Company" column="current_company" sortBy={sortBy} sortDirection={sortDirection} onSortChange={onSortChange} />
+        <SortHeader label="Company" column="current_company" sortBy={sortBy} sortDirection={sortDirection} onSortChange={onSortChange} sortable={sortable} />
       ),
       cell: ({ row }) => {
         const company = row.original.company

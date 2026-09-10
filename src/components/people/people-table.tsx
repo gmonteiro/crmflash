@@ -29,6 +29,8 @@ interface PeopleTableProps {
   sortBy?: string
   sortDirection?: "asc" | "desc"
   onSortChange: (column: string) => void
+  /** false congela a ordem: cabeçalhos sem botão de ordenar. */
+  sortable?: boolean
   onSelectionChange?: (selectedIds: string[]) => void
   shortlistsByPerson?: Record<string, { id: string; name: string }[]>
 }
@@ -45,6 +47,7 @@ export function PeopleTable({
   sortBy,
   sortDirection,
   onSortChange,
+  sortable = true,
   onSelectionChange,
   shortlistsByPerson,
 }: PeopleTableProps) {
@@ -57,7 +60,7 @@ export function PeopleTable({
   const ownersByPerson = usePeopleOwners(personIds)
   const memberEmails = useMemberEmails()
 
-  const columns = getPeopleColumns({ onUpdate, onDelete, sortBy, sortDirection, onSortChange, shortlistsByPerson, ownersByPerson, memberEmails })
+  const columns = getPeopleColumns({ onUpdate, onDelete, sortBy, sortDirection, onSortChange, sortable, shortlistsByPerson, ownersByPerson, memberEmails })
 
   const table = useReactTable({
     data: people,
