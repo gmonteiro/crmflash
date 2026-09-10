@@ -224,6 +224,15 @@ export interface ShortlistMember {
   company?: Company | null
 }
 
+export interface ScreeningCursor {
+  workspace_id: string
+  user_id: string
+  entity_type: ShortlistEntityType
+  cut_created_at: string
+  cut_id: string
+  updated_at: string
+}
+
 export interface CompanyNextStep {
   id: string
   workspace_id: string
