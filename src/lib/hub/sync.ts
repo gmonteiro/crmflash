@@ -1,8 +1,11 @@
 import { googleAccessToken, listCalendarEvents, SyncTokenExpiredError } from "@/lib/google/calendar"
+import { getMessageMetadata, gmailProfileHistoryId, historyMessageIds, listMessageIds, sendGmail } from "@/lib/google/gmail"
 import { internalDomains } from "@/lib/identity/normalize"
 import { TranscriptionAppClient } from "@/lib/transcription/client"
 import { emptyStats, ingestGoogleEvent, relinkPending, type CalendarIngestStats } from "./calendar-ingest"
+import { ClaudeReviewer, composeDigest, runDailyReview, type DailyReviewStore } from "./daily-review"
 import { ClaudeExtractor } from "./extraction"
+import { syncGmail, type GmailSource } from "./gmail-ingest"
 import type { HubStore } from "./store"
 import { syncTranscripts, type SyncResult } from "./transcript-ingest"
 
@@ -58,6 +61,38 @@ export async function runCalendarSync(
   return { ...stats, fullSync, complete }
 }
 
-export async function runTranscriptSync(store: HubStore): Promise<SyncResult> {
-  return syncTranscripts(store, new TranscriptionAppClient(), new ClaudeExtractor(), internalDomains())
+export async function runTranscriptSync(store: HubStore, budgetMs?: number): Promise<SyncResult> {
+  return syncTranscripts(store, new TranscriptionAppClient(), new ClaudeExtractor(), internalDomains(), { budgetMs })
+}
+
+/** A caixa da conta comercial (o mesmo refresh token do Calendar, com gmail.readonly). */
+export async function runGmailSync(store: HubStore, budgetMs?: number) {
+  const token = await googleAccessToken()
+  const source: GmailSource = {
+    profileHistoryId: () => gmailProfileHistoryId(token),
+    listIds: (q) => listMessageIds(token, q),
+    history: (h) => historyMessageIds(token, h),
+    get: (id) => getMessageMetadata(token, id),
+  }
+  return syncGmail(store, source, internalDomains(), { budgetMs })
+}
+
+/**
+ * Revisão diária + resumo por e-mail. O resumo sai uma vez por dia (o cursor
+ * daily_digest guarda o dia enviado) e só se houver risco, sugestão, avanço ou
+ * caso na fila. Rodar com companyId revisa só aquela conta e não manda e-mail.
+ */
+export async function runDailyReviewAndDigest(store: HubStore & DailyReviewStore, opts: { companyId?: string } = {}) {
+  const review = await runDailyReview(store, new ClaudeReviewer(), { companyId: opts.companyId })
+  if (opts.companyId) return { ...review, digest: null }
+
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "https://crmflash.vercel.app").replace(/\/$/, "")
+  const digest = composeDigest(review.today, await store.reviewsOn(review.today), await store.openIdentityReviews(), appUrl)
+  const to = process.env.DIGEST_TO_EMAIL
+  let sent: string | null = null
+  if (digest && to && review.complete && (await store.getCursor("daily_digest")) !== review.today) {
+    sent = await sendGmail(await googleAccessToken(), { to, subject: digest.subject, html: digest.html })
+    await store.setCursor("daily_digest", review.today)
+  }
+  return { ...review, digest: digest ? { subject: digest.subject, counts: digest.counts, sent: !!sent, to: to ?? null } : null }
 }

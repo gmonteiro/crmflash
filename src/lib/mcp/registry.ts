@@ -23,7 +23,7 @@ import { findOrCreatePerson } from "./tools/find-or-create-person"
 import { timeline } from "./tools/hub/timeline"
 import { listIdentityReviews, resolveIdentityReview } from "./tools/hub/identity-reviews"
 import { decideProposal, explain } from "./tools/hub/proposals"
-import { attachTranscript, linkCalendarEvent, syncNow } from "./tools/hub/ingestion"
+import { attachTranscript, dailyReview, linkCalendarEvent, syncNow } from "./tools/hub/ingestion"
 
 export interface McpTool<S extends z.ZodType = z.ZodType> {
   name: string
@@ -78,6 +78,7 @@ export const TOOLS: AnyMcpTool[] = [
   resolveIdentityReview,
   decideProposal,
   syncNow,
+  dailyReview,
   attachTranscript,
   linkCalendarEvent,
 ]

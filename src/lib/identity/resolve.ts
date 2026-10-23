@@ -34,6 +34,12 @@ export interface Observation {
   sourceRef: string
   /** Empresas já ligadas ao mesmo contexto (outros participantes do convite). */
   contextCompanyIds?: string[]
+  /**
+   * false: só liga pelo que já é conhecido, sem abrir caso na fila. O Gmail usa
+   * para e-mail enviado e para e-mail genérico: abrir caso para cada
+   * destinatário de 30 dias de caixa de saída afogaria a fila.
+   */
+  openReview?: boolean
 }
 
 export type Resolution =
@@ -98,6 +104,7 @@ export async function resolveObservation(
   // Degrau 4: e-mail genérico desconhecido. Candidatos só por nome, dentro das
   // empresas do mesmo contexto — mas quem decide é você.
   if (isFreeMailDomain(domain)) {
+    if (obs.openReview === false) return { status: "unresolvable", reason: "email_generico_desconhecido" }
     const candidates = await nameCandidates(store, displayName, obs.contextCompanyIds ?? [])
     const review = await store.openReview({
       dedupKey: reviewDedupKey("email", email),
@@ -115,6 +122,7 @@ export async function resolveObservation(
   // Degrau 3: domínio que ninguém ligou ainda. Nunca grava sozinho: um domínio
   // errado contamina todos os e-mails futuros daquele domínio.
   if (!dom || !dom.companyId) {
+    if (obs.openReview === false) return { status: "unresolvable", reason: "dominio_desconhecido" }
     const label = domainLabel(domain)
     const byKey = await store.companiesByNameKey(companyNameKey(label) ?? label)
     const candidates: ReviewCandidate[] = byKey.map((c) => ({
