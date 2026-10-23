@@ -160,6 +160,11 @@ export class MemoryHubStore implements HubStore {
     return row
   }
 
+  async closeReviewAuto(dedupKey: string) {
+    const r = this.reviews.get(dedupKey)
+    if (r?.status === "open") this.reviews.set(dedupKey, { ...r, status: "resolved" })
+  }
+
   async upsertEvent(row: EventRow): Promise<UpsertEventResult> {
     const existing = this.events.get(row.idempotencyKey)
     if (!existing) {

@@ -105,6 +105,15 @@ describe("ingestão do Calendar", () => {
     expect(kinds()).toEqual(["meeting.rescheduled", "meeting.scheduled"])
   })
 
+  it("mesmo horário em outro formato (Postgres devolve +00:00) não é remarcação", async () => {
+    await ingestGoogleEvent(store, invite(), INTERNAL)
+    // O que o banco devolve na releitura: mesmo instante, outro texto.
+    const row = store.calendar.get("evt-1")!
+    store.calendar.set("evt-1", { ...row, startAt: "2026-10-10T16:00:00+00:00", endAt: "2026-10-10T17:00:00+00:00" })
+    await ingestGoogleEvent(store, invite({ etag: '"2"' }), INTERNAL)
+    expect(kinds()).toEqual(["meeting.scheduled"])
+  })
+
   it("cancelamento sem participantes (sync incremental) usa o espelho", async () => {
     await ingestGoogleEvent(store, invite(), INTERNAL)
     await ingestGoogleEvent(store, { id: "evt-1", status: "cancelled", etag: '"3"' }, INTERNAL)
