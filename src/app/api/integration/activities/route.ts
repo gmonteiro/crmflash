@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { validateIntegrationAuth } from '@/lib/auth/integration'
 import { integrationActivitySchema } from '@/lib/validators'
 import { rateLimit, rateLimitKey } from '@/lib/rate-limit'
+import { applyReviewedFromIntegration, findMeetingActivity } from '@/lib/integration/reviewed'
 
 export async function POST(request: NextRequest) {
   const auth = await validateIntegrationAuth(request)
@@ -37,6 +38,9 @@ export async function POST(request: NextRequest) {
     summary,
     speakers,
     audio_url,
+    next_steps,
+    signals,
+    contacts,
   } = parsed.data
 
   const supabase = createClient(
@@ -71,66 +75,55 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Dedup check: same meeting + same target = already sent
+  // Dedup: mesma reunião + mesmo destino = já enviada. A atividade não é
+  // recriada, mas os campos revisados (abaixo) são processados mesmo assim:
+  // reenviar é como você manda o que editou depois.
+  let found: Record<string, unknown> | null = null
+  let created = false
   if (source_meeting_id) {
-    let dedup = supabase
-      .from('activities')
-      .select('id, created_at')
-      .eq('workspace_id', workspaceId)
-      .eq('source', 'transcription_app')
-      .eq('source_meeting_id', source_meeting_id)
-
-    if (person_id) {
-      dedup = dedup.eq('person_id', person_id)
-    } else {
-      dedup = dedup.is('person_id', null)
-    }
-    if (company_id) {
-      dedup = dedup.eq('company_id', company_id)
-    } else {
-      dedup = dedup.is('company_id', null)
-    }
-
-    const { data: existing } = await dedup.maybeSingle()
-
-    if (existing) {
-      return NextResponse.json({
-        activity: existing,
-        created: false,
-      })
-    }
-  }
-
-  // Create activity
-  const { data: activity, error } = await supabase
-    .from('activities')
-    .insert({
-      workspace_id: workspaceId,
-      user_id: userId,
-      person_id: person_id || null,
-      company_id: company_id || null,
-      type: 'meeting',
-      title,
-      date: date || new Date().toISOString(),
-      source: 'transcription_app',
-      source_meeting_id: source_meeting_id || null,
-      source_app_url: source_app_url || null,
-      transcript: transcript || null,
-      summary: summary || null,
-      speakers: speakers || null,
-      audio_url: audio_url || null,
+    found = await findMeetingActivity(supabase, workspaceId, source_meeting_id, {
+      personId: person_id ?? null,
+      companyId: company_id ?? null,
     })
-    .select()
-    .single()
-
-  if (error) {
-    console.error("Integration activity insert error:", error)
-    return NextResponse.json({ error: 'Failed to create activity' }, { status: 500 })
   }
 
-  // Create next steps from action_items if summary provided and company_id exists
-  let nextStepsCreated = 0
-  if (summary?.action_items?.length > 0 && company_id) {
+  if (!found) {
+    const { data: inserted, error } = await supabase
+      .from('activities')
+      .insert({
+        workspace_id: workspaceId,
+        user_id: userId,
+        person_id: person_id || null,
+        company_id: company_id || null,
+        type: 'meeting',
+        title,
+        date: date || new Date().toISOString(),
+        source: 'transcription_app',
+        source_meeting_id: source_meeting_id || null,
+        source_app_url: source_app_url || null,
+        transcript: transcript || null,
+        summary: summary || null,
+        speakers: speakers || null,
+        audio_url: audio_url || null,
+      })
+      .select()
+      .single()
+
+    if (error) {
+      console.error("Integration activity insert error:", error)
+      return NextResponse.json({ error: 'Failed to create activity' }, { status: 500 })
+    }
+    found = inserted as Record<string, unknown>
+    created = true
+  }
+  const activity = found
+
+  // Formato antigo: summary.action_items (strings) viram próximo passo, só com
+  // empresa e só na primeira vez. Com next_steps no payload, eles SUBSTITUEM
+  // esta conversão — os mesmos passos chegam nos dois campos, e converter os
+  // dois duplicaria.
+  let legacyNextSteps = 0
+  if (created && !next_steps?.length && summary?.action_items?.length > 0 && company_id) {
     const steps = summary.action_items.map((item: string) => ({
       workspace_id: workspaceId,
       user_id: userId,
@@ -138,17 +131,50 @@ export async function POST(request: NextRequest) {
       title: item,
     }))
 
-    const { data: created } = await supabase
+    const { data: createdSteps } = await supabase
       .from('company_next_steps')
       .insert(steps)
       .select('id')
 
-    nextStepsCreated = created?.length || 0
+    legacyNextSteps = createdSteps?.length || 0
   }
 
+  // Campos revisados no TranscriptionApp → hub (src/lib/hub/reviewed-fields.ts).
+  const hasReviewed = !!(next_steps?.length || signals?.length || contacts?.length)
+  let reviewed: Awaited<ReturnType<typeof applyReviewedFromIntegration>> | null = null
+  if (hasReviewed && company_id) {
+    const activityId = String(activity.id)
+    reviewed = await applyReviewedFromIntegration(
+      supabase,
+      { workspaceId, userId },
+      {
+        companyId: company_id,
+        activityId,
+        meetingId: source_meeting_id || `activity:${activityId}`,
+        meetingDate: date || (activity.date as string | undefined) || new Date().toISOString(),
+        appUrl: source_app_url || null,
+        nextSteps: next_steps ?? [],
+        signals: signals ?? [],
+        contacts: contacts ?? [],
+      }
+    )
+  }
+
+  const r = reviewed?.result
   return NextResponse.json({
     activity,
-    created: true,
-    next_steps_created: nextStepsCreated,
+    created,
+    next_steps_created: legacyNextSteps + (r?.next_steps_created ?? 0),
+    signals_captured: r?.signals_captured ?? 0,
+    contacts_created: r?.contacts_created ?? 0,
+    contacts_in_review: r?.contacts_in_review ?? 0,
+    // Item a item: o que entrou, o que já estava, o que foi para a fila.
+    ...(hasReviewed
+      ? {
+          structured: company_id
+            ? { next_steps: r?.next_steps ?? [], signals: r?.signals ?? [], contacts: r?.contacts ?? [], error: reviewed?.error ?? null }
+            : { next_steps: [], signals: [], contacts: [], error: null, skipped: 'sem_empresa' },
+        }
+      : {}),
   })
 }
