@@ -230,6 +230,18 @@ describe("ingestão da reunião", () => {
     expect([...store.reviews.values()].some((v) => v.reason === "reuniao_sem_convite")).toBe(true)
   })
 
+  it("caso reuniao_sem_convite fecha sozinho quando a reunião passa a casar", async () => {
+    const b = undiarized({ id: "m-z", started_at: "2026-10-11T12:00:00+00:00", ended_at: "2026-10-11T13:00:00+00:00" })
+    await ingestMeeting(store, new FakeSource([b]), new CountingExtractor(), "m-z", INTERNAL)
+    expect([...store.reviews.values()].map((r) => [r.reason, r.status])).toEqual([["reuniao_sem_convite", "open"]])
+
+    // O convite aparece (ou a fila liga o domínio) e a próxima rodada casa.
+    await ingestGoogleEvent(store, { ...invite, id: "evt-2", start: { dateTime: "2026-10-11T09:00:00-03:00" }, end: { dateTime: "2026-10-11T10:00:00-03:00" } }, INTERNAL)
+    const r = await ingestMeeting(store, new FakeSource([b]), new CountingExtractor(), "m-z", INTERNAL)
+    expect(r.status).toBe("linked")
+    expect([...store.reviews.values()].map((v) => v.status)).toEqual(["resolved"])
+  })
+
   it("reunião ainda gravando é ignorada", async () => {
     const r = await ingestMeeting(store, new FakeSource([bundle({ status: "recording" })]), new CountingExtractor(), "m-1", INTERNAL)
     expect(r.status).toBe("skipped_incomplete")

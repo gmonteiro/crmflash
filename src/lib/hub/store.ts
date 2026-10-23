@@ -205,6 +205,8 @@ export interface HubStore {
   companiesByNameKey(key: string): Promise<CompanyRow[]>
   /** Dedup por dedup_key: a mesma observação não abre duas revisões. */
   openReview(r: NewReview): Promise<ReviewRow>
+  /** Fecha o caso aberto (se houver) porque o próprio sync resolveu: ex. a reunião passou a casar. */
+  closeReviewAuto(dedupKey: string, detail: string): Promise<void>
 
   // --- eventos ---
   upsertEvent(row: EventRow): Promise<UpsertEventResult>

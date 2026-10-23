@@ -145,6 +145,8 @@ export async function ingestMeeting(
     return { meetingId, status: "no_company", companies: [], extracted: false }
   }
   if (ev) await store.setCalendarTranscription(ev.id, b.id)
+  // Caso aberto numa rodada anterior (sem convite, sem empresa) que esta resolveu.
+  await store.closeReviewAuto(reviewDedupKey("meeting", b.id), `ligada a ${companies.join(", ")}`)
 
   // Participantes do convite, já resolvidos (a escada é idempotente: aqui cai
   // no degrau 1 para quem o calendar-ingest já resolveu).
