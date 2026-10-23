@@ -35,6 +35,23 @@ beforeEach(() => {
 const kinds = () => [...store.events.values()].map((e) => e.kind).sort()
 
 describe("ingestão do Calendar", () => {
+  it("ocorrência de série além de 180 dias não vira evento nem espelho", async () => {
+    const now = Date.parse("2026-10-23T12:00:00Z")
+    const stats = await ingestGoogleEvent(
+      store,
+      invite({ id: "serie_20400904", recurringEventId: "serie", start: { dateTime: "2040-09-04T10:00:00-03:00" }, end: { dateTime: "2040-09-04T11:00:00-03:00" } }),
+      INTERNAL,
+      undefined,
+      now
+    )
+    expect(stats.skippedFuture).toBe(1)
+    expect(store.events.size).toBe(0)
+    expect(store.calendar.size).toBe(0)
+
+    await ingestGoogleEvent(store, invite({ start: { dateTime: "2027-03-01T10:00:00-03:00" }, end: { dateTime: "2027-03-01T11:00:00-03:00" } }), INTERNAL, undefined, now)
+    expect(kinds()).toEqual(["meeting.scheduled"])
+  })
+
   it("convite com cliente → meeting.scheduled na conta, pessoa criada e ligada", async () => {
     await ingestGoogleEvent(store, invite(), INTERNAL)
     expect(kinds()).toEqual(["meeting.scheduled"])

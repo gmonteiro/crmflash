@@ -18,21 +18,35 @@ export interface CalendarIngestStats {
   linked: number
   pending: number
   events: number
+  /** Começa além de CALENDAR_HORIZON_DAYS: ocorrência distante de série recorrente. */
+  skippedFuture: number
 }
 
+/**
+ * Até onde no futuro um convite vira evento. Série recorrente sem fim chega com
+ * singleEvents=true expandida por anos (uma quinzenal real veio até 2040, 364
+ * ocorrências): sem o corte, cada uma vira um meeting.scheduled na conta.
+ */
+export const CALENDAR_HORIZON_DAYS = 180
+
 export function emptyStats(): CalendarIngestStats {
-  return { seen: 0, skippedInternal: 0, linked: 0, pending: 0, events: 0 }
+  return { seen: 0, skippedInternal: 0, linked: 0, pending: 0, events: 0, skippedFuture: 0 }
 }
 
 export async function ingestGoogleEvent(
   store: HubStore,
   gev: GoogleEvent,
   internal: Set<string>,
-  stats: CalendarIngestStats = emptyStats()
+  stats: CalendarIngestStats = emptyStats(),
+  now: number = Date.now()
 ): Promise<CalendarIngestStats> {
   stats.seen++
-  const previous = await store.getCalendarEventByGoogleId(gev.id)
   let row = toCalendarRow(gev, internal)
+  if (row.startAt && Date.parse(row.startAt) > now + CALENDAR_HORIZON_DAYS * 24 * 60 * 60 * 1000) {
+    stats.skippedFuture++
+    return stats
+  }
+  const previous = await store.getCalendarEventByGoogleId(gev.id)
 
   // Cancelamento no sync incremental chega sem participantes. Sem o espelho
   // anterior, não daria para saber de qual conta era.
