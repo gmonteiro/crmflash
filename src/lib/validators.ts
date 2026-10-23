@@ -55,6 +55,56 @@ export type NextStepFormData = z.infer<typeof nextStepSchema>
 
 const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
+// Os seis sinais de compromisso (company_commitment_signals.signal_type).
+export const commitmentSignalEnum = z.enum([
+  'second_interlocutor',
+  'presented_internally',
+  'shared_real_data',
+  'allocated_team_member',
+  'asked_price',
+  'security_process',
+])
+
+const isoDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use AAAA-MM-DD')
+  .refine((d) => {
+    const t = new Date(`${d}T00:00:00Z`)
+    return !Number.isNaN(t.getTime()) && t.toISOString().slice(0, 10) === d
+  }, 'Data inválida')
+
+const optionalText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .nullable()
+    .optional()
+    .transform((v) => (v ? v : null))
+
+// Campos que você revisou no TranscriptionApp antes de mandar (todos opcionais).
+export const integrationNextStepItemSchema = z.object({
+  title: z.string().trim().min(1).max(500),
+  due_date: isoDate.nullable().optional().transform((v) => v ?? null),
+  assignee: optionalText(200),
+  source_action_item_id: optionalText(100),
+})
+
+export const integrationSignalItemSchema = z.object({
+  type: commitmentSignalEnum,
+  evidence: optionalText(1000),
+})
+
+export const integrationContactItemSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  role: optionalText(200),
+  email: z
+    .union([z.literal(''), z.string().trim().email().max(320)])
+    .nullable()
+    .optional()
+    .transform((v) => (v ? v : null)),
+})
+
 export const integrationActivitySchema = z.object({
   person_id: z.string().regex(uuidRegex, 'Invalid UUID').optional().nullable(),
   company_id: z.string().regex(uuidRegex, 'Invalid UUID').optional().nullable(),
@@ -66,8 +116,18 @@ export const integrationActivitySchema = z.object({
   summary: z.any().optional().nullable(),
   speakers: z.any().optional().nullable(),
   audio_url: z.string().url().max(2000).optional().nullable(),
+  next_steps: z.array(integrationNextStepItemSchema).max(50).optional(),
+  signals: z.array(integrationSignalItemSchema).max(6).optional(),
+  contacts: z.array(integrationContactItemSchema).max(50).optional(),
 }).refine(data => data.person_id || data.company_id, {
   message: 'At least one of person_id or company_id is required',
+})
+
+// Pendência mandada depois da reunião (POST /api/integration/next-steps).
+export const integrationNextStepsSchema = z.object({
+  company_id: z.string().regex(uuidRegex, 'Invalid UUID'),
+  source_meeting_id: z.string().min(1).max(500),
+  next_steps: z.array(integrationNextStepItemSchema).min(1).max(50),
 })
 
 export type IntegrationActivityData = z.infer<typeof integrationActivitySchema>
@@ -80,15 +140,6 @@ export const documentUploadSchema = z.object({
 // ---------------------------------------------------------------------------
 // Copiloto
 // ---------------------------------------------------------------------------
-
-export const commitmentSignalEnum = z.enum([
-  'second_interlocutor',
-  'presented_internally',
-  'shared_real_data',
-  'allocated_team_member',
-  'asked_price',
-  'security_process',
-])
 
 export const copilotInterpretRequestSchema = z.object({
   companyId: z.string().regex(uuidRegex, 'Invalid UUID'),

@@ -86,6 +86,8 @@ export function fakeSupabase(rows: Record<string, unknown[]> = {}): FakeSupabase
       return {
         select: () => builder(table, "select"),
         insert: (payload: unknown) => builder(table, "insert", payload),
+        // upsert é gravado como insert: para o teste, é "escreveu esta linha".
+        upsert: (payload: unknown) => builder(table, "insert", payload),
         update: (payload: unknown) => builder(table, "update", payload),
         delete: () => builder(table, "delete"),
       }

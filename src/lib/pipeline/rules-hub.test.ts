@@ -82,6 +82,21 @@ describe("inference_proposed", () => {
     expect(q.title).toMatch(/"Maria" → "João Silva"/)
   })
 
+  it("próximo passo que só a IA viu numa reunião revisada: pergunta se cria, com prazo", () => {
+    const p = {
+      ...stage,
+      id: "inf-3",
+      field: "next_step:abc123",
+      value: { title: "Receber export do ERP", due_date: "2026-10-16", assignee: "João" },
+    }
+    const q = rules(snap({ proposals: [p] })).find((x) => x.ruleId === "inference_proposed")!
+    expect(q.title).toMatch(/"Receber export do ERP"/)
+    expect(q.title).toMatch(/16\/10/)
+    expect(q.actions.find((a) => a.id === "accept")!.effects).toEqual([
+      { kind: "decide_inference", inferenceId: "inf-3", decision: "accept" },
+    ])
+  })
+
   it("estágio sugerido igual ao atual não pergunta nada", () => {
     const same = { ...stage, value: { target_stage: "Diagnóstico" } }
     expect(rules(snap({ proposals: [same] })).some((x) => x.ruleId === "inference_proposed")).toBe(false)
