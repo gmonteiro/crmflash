@@ -248,6 +248,16 @@ export class SupabaseHubStore implements HubStore {
     }
   }
 
+  async closeReviewAuto(dedupKey: string, detail: string) {
+    const { error } = await this.db
+      .from("identity_reviews")
+      .update({ status: "resolved", resolution: { type: "auto", detail }, resolved_at: new Date().toISOString() })
+      .eq("workspace_id", this.workspaceId)
+      .eq("dedup_key", dedupKey)
+      .eq("status", "open")
+    if (error) fail("closeReviewAuto", error)
+  }
+
   // --- eventos ------------------------------------------------------------
 
   async upsertEvent(row: EventRow): Promise<UpsertEventResult> {
