@@ -52,6 +52,28 @@ export interface SnapshotActivity {
   type: string
   title: string
   date: string
+  /** Vocabulário do hub (019). null nas linhas antigas e nas manuais. */
+  kind?: string | null
+}
+
+/** Proposta da IA esperando decisão (inferences.status = proposed). */
+export interface SnapshotProposal {
+  id: string
+  company_id: string
+  field: string
+  value: Record<string, unknown>
+  evidence: { quote?: string; locator?: string; url?: string }[]
+  created_at: string
+}
+
+/** Caso aberto da fila de identidade, já associado a uma empresa. */
+export interface SnapshotReview {
+  id: string
+  company_id: string
+  reason: string
+  observed: Record<string, unknown>
+  candidates: { personId?: string; companyId?: string; label: string }[]
+  created_at: string
 }
 
 export interface SnapshotPerson {
@@ -69,4 +91,6 @@ export interface PipelineSnapshot {
   nextSteps: SnapshotNextStep[] // só pendentes
   activities: SnapshotActivity[] // vazio quando includeActivities = false
   people: SnapshotPerson[] // vazio quando includePeople = false
+  proposals: SnapshotProposal[]
+  reviews: SnapshotReview[]
 }

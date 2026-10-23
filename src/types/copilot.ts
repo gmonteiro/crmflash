@@ -10,6 +10,8 @@ export type CopilotRuleId =
   | "exit_criteria_unmet"
   | "missing_champion"
   | "missing_pain_hypothesis"
+  | "inference_proposed"
+  | "identity_ambiguous"
 
 export type CopilotDraftKind = "cobranca" | "retomada" | "follow_up" | "pos_reuniao"
 
@@ -20,7 +22,8 @@ export type CopilotDraftKind = "cobranca" | "retomada" | "follow_up" | "pos_reun
 // fez algo. Ação do vendedor (cobrar, concluir tarefa, mandar proposta) nunca bumpa.
 export type CopilotEffect =
   | { kind: "none" }
-  | { kind: "mark_client_event" }
+  // occurredAt: a data REAL do fato (ingestão, backfill). Sem ela, agora.
+  | { kind: "mark_client_event"; occurredAt?: string }
   | { kind: "move_stage"; target: "next" | "prev" | "title"; title?: string }
   // dueDate (yyyy-MM-dd) tem precedência sobre inDays; um dos dois é obrigatório.
   | { kind: "create_next_step"; title: string; inDays?: number; dueDate?: string }
@@ -35,6 +38,16 @@ export type CopilotEffect =
     }
   | { kind: "note"; text: string }
   | { kind: "open_drafts"; draftKind: CopilotDraftKind }
+  // Hub: aceitar/recusar uma proposta da IA (tabela inferences).
+  | { kind: "decide_inference"; inferenceId: string; decision: "accept" | "reject" }
+  // Hub: resolver um caso da fila de identidade (tabela identity_reviews).
+  | { kind: "resolve_review"; reviewId: string; resolution: ReviewResolution }
+
+export type ReviewResolution =
+  | { type: "link_person"; personId: string }
+  | { type: "link_company"; companyId: string }
+  | { type: "create_company"; name: string }
+  | { type: "ignore" }
 
 export interface CopilotQuickAction {
   id: string

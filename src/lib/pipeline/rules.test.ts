@@ -57,6 +57,8 @@ function snapshot(companyIds: string[]): PipelineSnapshot {
     nextSteps: [],
     activities: [],
     people: [],
+    proposals: [],
+    reviews: [],
   }
 }
 

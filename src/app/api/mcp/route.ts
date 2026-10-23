@@ -3,7 +3,8 @@ import { resolveIdentity, type McpIdentity } from "@/lib/mcp/identity"
 import { findTool, toolListPayload } from "@/lib/mcp/registry"
 import { rateLimit } from "@/lib/rate-limit"
 
-export const maxDuration = 60
+// sync_now e attach_transcript rodam a extração da reunião, que passa de 60 s.
+export const maxDuration = 300
 
 const PROTOCOL_VERSION = "2025-06-18"
 

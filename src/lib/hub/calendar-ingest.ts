@@ -166,3 +166,14 @@ export async function relinkPending(
   }
   return stats
 }
+
+/** Regrava os eventos de um convite já espelhado (ex.: depois de ligar à mão). */
+export async function reingestCalendarEvent(
+  store: HubStore,
+  ev: CalendarEventRow,
+  internal: Set<string>
+): Promise<CalendarIngestStats> {
+  const stats = emptyStats()
+  await linkAndRecord(store, ev, ev, null, {}, internal, stats)
+  return stats
+}

@@ -13,6 +13,8 @@ const RULE_IDS: readonly CopilotRuleId[] = [
   "exit_criteria_unmet",
   "missing_champion",
   "missing_pain_hypothesis",
+  "inference_proposed",
+  "identity_ambiguous",
 ]
 
 /**

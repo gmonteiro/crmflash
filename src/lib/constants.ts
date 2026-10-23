@@ -93,6 +93,8 @@ export const SEEN_SUPPRESS_DAYS: Record<CopilotRuleId, number> = {
   exit_criteria_unmet: 7,
   missing_champion: 7,
   missing_pain_hypothesis: 14,
+  inference_proposed: 1,
+  identity_ambiguous: 1,
 }
 
 // Quando você responde um card inteiro em texto livre, as pendências que a
@@ -109,6 +111,8 @@ export const NARRATION_SUPPRESS_DAYS: Record<CopilotRuleId, number> = {
   exit_criteria_unmet: 7,
   missing_champion: 7,
   missing_pain_hypothesis: 14,
+  inference_proposed: 3,
+  identity_ambiguous: 3,
 }
 
 // Dias no mesmo estágio antes de o copiloto cobrar o critério de saída.

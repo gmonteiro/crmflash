@@ -6,7 +6,8 @@ import { NextResponse, type NextRequest } from 'next/server'
 // na própria rota; deixar o middleware barrá-los faria o handler nunca rodar.
 // "Público" aqui significa "não autentica por cookie de sessão" — não que seja
 // aberto. /api/integration valida segredo compartilhado, /api/mcp valida Bearer
-// e as rotas de OAuth validam o próprio protocolo; deixar o middleware barrá-las
+// as rotas de OAuth validam o próprio protocolo e /api/cron valida CRON_SECRET;
+// deixar o middleware barrá-las
 // faria o handler nunca rodar.
 //
 // /oauth/authorize fica DE FORA de propósito: ela precisa da sessão, e o
@@ -17,6 +18,7 @@ const publicRoutes = [
   '/auth/callback',
   '/api/integration',
   '/api/mcp',
+  '/api/cron/',
   '/.well-known/',
   '/api/oauth/',
 ]

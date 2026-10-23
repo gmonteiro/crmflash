@@ -6,6 +6,8 @@ import type {
   SnapshotCompany,
   SnapshotNextStep,
   SnapshotPerson,
+  SnapshotProposal,
+  SnapshotReview,
   SnapshotSignal,
   SnapshotStageEvent,
 } from "./types"
@@ -65,7 +67,7 @@ export async function fetchPipelineSnapshot(
     const since = new Date(now.getTime() - activityDays * MS_PER_DAY).toISOString()
     const { data } = await supabase
       .from("activities")
-      .select("id, company_id, type, title, date")
+      .select("id, company_id, type, title, date, kind")
       .not("company_id", "is", null)
       .gte("date", since)
       .order("date", { ascending: false })
@@ -83,6 +85,23 @@ export async function fetchPipelineSnapshot(
     people = (data ?? []) as SnapshotPerson[]
   }
 
+  // Hub (migrações 020/021). Antes delas a tabela não existe e o select volta
+  // erro: a fila segue sem estas regras, em vez de quebrar inteira.
+  const [proposalsRes, reviewsRes] = await Promise.all([
+    supabase
+      .from("inferences")
+      .select("id, company_id, field, value, evidence, created_at")
+      .eq("status", "proposed")
+      .order("created_at", { ascending: false })
+      .limit(ROW_LIMIT),
+    supabase
+      .from("identity_reviews")
+      .select("id, company_id, reason, observed, candidates, created_at")
+      .eq("status", "open")
+      .not("company_id", "is", null)
+      .limit(ROW_LIMIT),
+  ])
+
   return {
     now,
     columns: (colsRes.data ?? []) as SnapshotColumn[],
@@ -92,5 +111,7 @@ export async function fetchPipelineSnapshot(
     nextSteps: (stepsRes.data ?? []) as SnapshotNextStep[],
     activities,
     people,
+    proposals: proposalsRes.error ? [] : ((proposalsRes.data ?? []) as SnapshotProposal[]),
+    reviews: reviewsRes.error ? [] : ((reviewsRes.data ?? []) as SnapshotReview[]),
   }
 }

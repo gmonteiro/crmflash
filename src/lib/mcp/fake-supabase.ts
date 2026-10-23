@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 
 export interface RecordedCall {
   table: string
-  op: "insert" | "update" | "select" | "delete"
+  op: "insert" | "update" | "select" | "delete" | "rpc"
   payload?: unknown
   filters: Record<string, unknown>
 }
@@ -60,6 +60,10 @@ export function fakeSupabase(rows: Record<string, unknown[]> = {}): FakeSupabase
         return chain
       },
       single() {
+        // insert().select().single() devolve a linha criada, como o PostgREST.
+        if (op === "insert" && !(rows[table] ?? [])[0] && payload && typeof payload === "object") {
+          return Promise.resolve({ data: { id: `${table}-new`, ...(payload as object) }, error: null })
+        }
         return Promise.resolve({ data: (rows[table] ?? [])[0] ?? null, error: null })
       },
       maybeSingle() {
@@ -74,6 +78,10 @@ export function fakeSupabase(rows: Record<string, unknown[]> = {}): FakeSupabase
   }
 
   const client = {
+    rpc(fn: string, args: unknown) {
+      calls.push({ table: fn, op: "rpc", payload: args, filters: {} })
+      return Promise.resolve({ data: null, error: null })
+    },
     from(table: string) {
       return {
         select: () => builder(table, "select"),

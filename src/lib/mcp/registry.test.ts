@@ -28,7 +28,11 @@ describe("registry", () => {
 })
 
 describe("cobertura da spec", () => {
-  it("tem as 20 tools da spec", () => {
-    expect(TOOLS).toHaveLength(20)
+  it("tem as 20 tools da spec + as 8 do hub de eventos", () => {
+    expect(TOOLS).toHaveLength(28)
+  })
+
+  it("nomes únicos: o tools/list não pode ter duas tools com o mesmo nome", () => {
+    expect(new Set(TOOLS.map((t) => t.name)).size).toBe(TOOLS.length)
   })
 })
