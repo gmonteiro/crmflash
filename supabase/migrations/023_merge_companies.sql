@@ -107,10 +107,8 @@ begin
     economic_buyer_name = coalesce(k.economic_buyer_name, d.economic_buyer_name),
     pain_hypothesis = coalesce(k.pain_hypothesis, d.pain_hypothesis),
     last_client_event_at = greatest(k.last_client_event_at, d.last_client_event_at),
-    context_inference_ids = (
-      select coalesce(array_agg(distinct x), '{}')
-        from unnest(coalesce(k.context_inference_ids, '{}') || coalesce(d.context_inference_ids, '{}')) as x
-    )
+    -- jsonb {campo: id da inferência}: a que fica vence no mesmo campo.
+    context_inference_ids = coalesce(d.context_inference_ids, '{}'::jsonb) || coalesce(k.context_inference_ids, '{}'::jsonb)
   where id = p_keep;
 
   insert into company_merges (workspace_id, kept_id, dropped_id, dropped_row, moved)
