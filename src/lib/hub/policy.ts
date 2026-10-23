@@ -103,6 +103,7 @@ export async function applyExtraction(
       await store.setCompanyField(company.id, column, value, row.id)
       stats.applied.push(key)
     } else {
+      await store.supersedePendingField(company.id, key, row.id)
       stats.proposed.push(key)
     }
   }
@@ -186,14 +187,17 @@ export async function applyExtraction(
 
   // --- estágio: sempre proposta ---
   if (ex.stage_suggestion && ex.stage_suggestion.target_stage !== company.stageTitle) {
-    const { created } = await store.insertInference({
+    const { row, created } = await store.insertInference({
       ...base,
       field: "stage_suggestion",
       value: { target_stage: ex.stage_suggestion.target_stage, from: company.stageTitle, rationale: ex.stage_suggestion.rationale },
       evidence: toEvidence(ex.stage_suggestion.evidence, meta),
       status: "proposed",
     })
-    if (created) stats.proposed.push("stage_suggestion")
+    if (created) {
+      await store.supersedePendingField(company.id, "stage_suggestion", row.id)
+      stats.proposed.push("stage_suggestion")
+    }
   }
 
   return stats

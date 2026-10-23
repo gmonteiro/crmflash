@@ -544,6 +544,20 @@ export class SupabaseHubStore implements HubStore {
     return (data ?? []).length
   }
 
+  async supersedePendingField(companyId: string, field: string, keepId: string) {
+    const { data, error } = await this.db
+      .from("inferences")
+      .update({ status: "superseded", decided_at: new Date().toISOString() })
+      .eq("workspace_id", this.workspaceId)
+      .eq("company_id", companyId)
+      .eq("field", field)
+      .eq("status", "proposed")
+      .neq("id", keepId)
+      .select("id")
+    if (error) fail("supersedePendingField", error)
+    return (data ?? []).length
+  }
+
   async setCompanyField(
     companyId: string,
     field: "champion_name" | "economic_buyer_name" | "pain_hypothesis",
