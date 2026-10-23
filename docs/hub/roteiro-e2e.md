@@ -131,6 +131,32 @@ No Claude: **"por que o CRM acha que o champion da <empresa> é <nome>?"** (`exp
 | Cancelada | Cancele o convite | `meeting.cancelled`, `client_engaged = false` |
 | Ligação de ontem | "registra a ligação de ontem às 15h com o João, ele atendeu" | `log_activity` com `occurred_at`; o contador vai para ontem às 15h, não para agora |
 
+## 8. Envio revisado do TranscriptionApp (opcional)
+
+No TranscriptionApp, abra a reunião do passo 2 → "Enviar para o CRM" → destino
+**empresa** → revise próximos passos (prazo, responsável), marque um sinal e
+deixe um contato marcado → Enviar.
+
+A resposta de cada destino traz `next_steps_created`, `signals_captured`,
+`contacts_created`, `contacts_in_review` e `structured` item a item.
+
+**Conferir:**
+```sql
+-- Seus passos: chave tapp:<reunião>:h:..., prazo e responsável
+select title, due_date, description, status, source_ref from company_next_steps
+ where company_id = '<EMPRESA>' and source_ref like 'tapp:%' order by created_at;
+
+-- De onde veio cada coisa: model = 'humano:transcriptionapp' é você; o resto é a IA
+select field, status, model, value->>'title' as passo from inferences
+ where company_id = '<EMPRESA>' and (field like 'next_step:%' or field like 'signal:%') order by created_at;
+```
+
+**Esperado:**
+- Passo que a IA já tinha criado da mesma reunião com o mesmo sentido: **uma** linha, com os seus valores e `source_ref` `...:h:...`; a inferência da IA fica `superseded`.
+- Rode o `sync_now` depois: nenhum passo novo. O que só a IA viu aparece como `proposed` e vira pergunta no `whats_stuck` ("Cria?").
+- Envie de novo pelo app: contagens iguais, resposta com `existing`.
+- Contato homônimo na empresa: caso `homonimos_na_empresa` na fila, nenhuma pessoa nova.
+
 ## Se algo der errado
 
 - **`500 TRANSCRIPTIONAPP_API_URL…`:** falta variável no CRM.
