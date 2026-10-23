@@ -128,8 +128,9 @@ async function linkAndRecord(
       ...base,
       sourceId: saved.googleEventId,
       kind: "meeting.scheduled",
-      // Sem `created` (religação), vale quando ficamos sabendo — nunca o
-      // horário da reunião, que pode estar no futuro.
+      // A data do convite (`created`; na religação, a do espelho). Só sem
+      // ela vale quando ficamos sabendo — nunca o horário da reunião, que
+      // pode estar no futuro.
       occurredAt: gev.created ?? new Date().toISOString(),
       title: `Convite: ${title}`,
       description: row.startAt ? `Marcada para ${row.startAt}` : null,
@@ -176,9 +177,14 @@ export async function relinkPending(
   for (const ev of await store.calendarEventsOverlapping(fromISO, toISO)) {
     if ((await store.calendarCompanies(ev.id)).length > 0) continue
     if (!hasExternalAttendee(ev)) continue
-    await linkAndRecord(store, ev, ev, null, {}, internal, stats)
+    await linkAndRecord(store, ev, ev, null, createdOf(ev), internal, stats)
   }
   return stats
+}
+
+/** Na religação não há o evento do Google; a data do convite vem do espelho. */
+function createdOf(ev: CalendarEventRow): Pick<GoogleEvent, "created"> {
+  return ev.googleCreatedAt ? { created: ev.googleCreatedAt } : {}
 }
 
 /** Regrava os eventos de um convite já espelhado (ex.: depois de ligar à mão). */
@@ -188,6 +194,6 @@ export async function reingestCalendarEvent(
   internal: Set<string>
 ): Promise<CalendarIngestStats> {
   const stats = emptyStats()
-  await linkAndRecord(store, ev, ev, null, {}, internal, stats)
+  await linkAndRecord(store, ev, ev, null, createdOf(ev), internal, stats)
   return stats
 }

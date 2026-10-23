@@ -138,6 +138,23 @@ describe("ingestão do Calendar", () => {
     expect([...store.events.values()][0]).toMatchObject({ companyId: "co-beta", kind: "meeting.scheduled" })
   })
 
+  it("religação de convite do CLIENTE usa a data do convite, não a hora do sync", async () => {
+    const gev = invite({
+      id: "evt-10",
+      created: "2026-10-03T09:00:00.000Z",
+      organizer: { email: "carla@beta.com" },
+      attendees: [{ email: "carla@beta.com", organizer: true }, { email: "gabriel@lumeis.ai", self: true }],
+    })
+    await ingestGoogleEvent(store, gev, INTERNAL)
+    store.addCompany({ id: "co-beta", name: "Beta" })
+    await store.addDomain({ domain: "beta.com", companyId: "co-beta", source: "review" })
+
+    await relinkPending(store, INTERNAL, "2026-10-01T00:00:00Z", "2026-10-31T00:00:00Z")
+    const ev = [...store.events.values()][0]
+    expect(ev).toMatchObject({ clientEngaged: true, engagementRule: "cal.client_invite", occurredAt: "2026-10-03T09:00:00.000Z" })
+    expect(store.companies.get("co-beta")!.lastClientEventAt).toBe("2026-10-03T09:00:00.000Z")
+  })
+
   it("convite com duas empresas vira um evento em cada timeline", async () => {
     store.addCompany({ id: "co-beta", name: "Beta" })
     store.domains.set("beta.com", { domain: "beta.com", companyId: "co-beta", ignored: false })

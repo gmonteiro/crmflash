@@ -56,6 +56,7 @@ export class MemoryHubStore implements HubStore {
   signals = new Map<string, NewSignal>() // company|type
   nextSteps = new Map<string, NewNextStep>() // sourceRef
   cursors = new Map<string, string | null>()
+  projects = new Map<string, { companyId: string | null; ignored: boolean }>() // projectId
 
   addCompany(c: MemoryCompany): MemoryCompany {
     this.companies.set(c.id, { contextInferenceIds: {}, ...c })
@@ -167,11 +168,28 @@ export class MemoryHubStore implements HubStore {
       this.events.set(row.idempotencyKey, { ...row, id: existing.id })
       return { id: existing.id, created: false, versionChanged: true }
     }
+    if (existing.engagementRule !== row.engagementRule) {
+      // Regra de engajamento mudou para o mesmo fato: reclassifica, com a nova evidência.
+      this.events.set(row.idempotencyKey, {
+        ...existing,
+        clientEngaged: row.clientEngaged,
+        engagementRule: row.engagementRule,
+        evidence: row.evidence,
+      })
+    }
     return { id: existing.id, created: false, versionChanged: false }
   }
 
   async addParticipants(activityId: string, refs: ParticipantRef[]) {
     for (const r of refs) this.participants.add(`${activityId}|${r.personId}|${r.role}`)
+  }
+
+  async tappProjectCompany(projectId: string) {
+    return this.projects.get(projectId) ?? null
+  }
+
+  async linkTappProject(projectId: string, _name: string | null, companyId: string | null, ignored: boolean) {
+    this.projects.set(projectId, { companyId, ignored })
   }
 
   async bumpClientEvent(companyId: string, occurredAt: string) {

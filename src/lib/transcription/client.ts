@@ -11,6 +11,10 @@ export interface TappMeetingSummary {
   google_calendar_event_id: string | null
   language: string
   transcript_version: string
+  /** Gravação do desktop ou importada vem sem started_at; created_at vem sempre. */
+  created_at?: string | null
+  /** Projeto escolhido no TranscriptionApp; o CRM liga cada um a uma empresa (022). */
+  project?: { id: string; name: string | null } | null
 }
 
 export interface TappBundle extends TappMeetingSummary {

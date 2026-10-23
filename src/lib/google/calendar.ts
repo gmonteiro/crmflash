@@ -120,6 +120,7 @@ export function toCalendarRow(ev: GoogleEvent, internal: Set<string>): NewCalend
     htmlLink: ev.htmlLink ?? null,
     meetLink: ev.hangoutLink ?? null,
     etag: ev.etag ?? null,
+    googleCreatedAt: ev.created ?? null,
   }
 }
 

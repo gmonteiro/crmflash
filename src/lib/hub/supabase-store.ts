@@ -72,13 +72,14 @@ function toCalendar(r: Row): CalendarEventRow {
     htmlLink: (r.html_link as string) ?? null,
     meetLink: (r.meet_link as string) ?? null,
     etag: (r.etag as string) ?? null,
+    googleCreatedAt: (r.google_created_at as string) ?? null,
     transcriptionMeetingId: (r.transcription_meeting_id as string) ?? null,
   }
 }
 
 const PERSON_COLS = "id, first_name, last_name, full_name, company_id, email"
 const CAL_COLS =
-  "id, google_event_id, ical_uid, recurring_event_id, summary, start_at, end_at, status, organizer_email, attendees, html_link, meet_link, etag, transcription_meeting_id"
+  "id, google_event_id, ical_uid, recurring_event_id, summary, start_at, end_at, status, organizer_email, attendees, html_link, meet_link, etag, google_created_at, transcription_meeting_id"
 
 export class SupabaseHubStore implements HubStore {
   constructor(
@@ -286,6 +287,15 @@ export class SupabaseHubStore implements HubStore {
     }
 
     if ((existing.source_version ?? null) === (row.sourceVersion ?? null)) {
+      if (existing.engagement_rule !== row.engagementRule) {
+        // Mesmo fato, regra de engajamento nova (ex.: meeting.held_with_invite):
+        // reclassifica só quem agiu e a evidência; o resto da linha fica.
+        const { error } = await this.db
+          .from("activities")
+          .update({ client_engaged: row.clientEngaged, engagement_rule: row.engagementRule, evidence: row.evidence })
+          .eq("id", existing.id)
+        if (error) fail("upsertEvent reclassify", error)
+      }
       return { id: existing.id, created: false, versionChanged: false }
     }
     // O resumo é escrito pela extração depois; não apagar o da versão anterior aqui.
@@ -296,10 +306,12 @@ export class SupabaseHubStore implements HubStore {
     return { id: existing.id, created: false, versionChanged: true }
   }
 
-  private async eventByKey(key: string): Promise<{ id: string; source_version: string | null } | null> {
+  private async eventByKey(
+    key: string
+  ): Promise<{ id: string; source_version: string | null; engagement_rule: string | null } | null> {
     const { data, error } = await this.db
       .from("activities")
-      .select("id, source_version")
+      .select("id, source_version, engagement_rule")
       .eq("workspace_id", this.workspaceId)
       .eq("idempotency_key", key)
       .maybeSingle()
@@ -345,6 +357,7 @@ export class SupabaseHubStore implements HubStore {
           html_link: ev.htmlLink,
           meet_link: ev.meetLink,
           etag: ev.etag,
+          google_created_at: ev.googleCreatedAt,
           last_synced_at: new Date().toISOString(),
         }),
         { onConflict: "workspace_id,google_event_id" }
@@ -395,6 +408,25 @@ export class SupabaseHubStore implements HubStore {
       .eq("calendar_event_id", calendarEventId)
     if (error) fail("calendarCompanies", error)
     return (data ?? []).map((r) => r.company_id as string)
+  }
+
+  async tappProjectCompany(projectId: string) {
+    const { data, error } = await this.db
+      .from("tapp_project_companies")
+      .select("company_id, ignored")
+      .eq("workspace_id", this.workspaceId)
+      .eq("project_id", projectId)
+      .maybeSingle()
+    if (error) fail("tappProjectCompany", error)
+    return data ? { companyId: (data.company_id as string) ?? null, ignored: !!data.ignored } : null
+  }
+
+  async linkTappProject(projectId: string, projectName: string | null, companyId: string | null, ignored: boolean) {
+    const { error } = await this.db.from("tapp_project_companies").upsert(
+      this.ws({ project_id: projectId, project_name: projectName, company_id: companyId, ignored, source: "review" }),
+      { onConflict: "workspace_id,project_id" }
+    )
+    if (error) fail("linkTappProject", error)
   }
 
   async setCalendarTranscription(calendarEventId: string, meetingId: string) {

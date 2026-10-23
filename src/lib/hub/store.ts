@@ -145,6 +145,8 @@ export interface CalendarEventRow {
   htmlLink: string | null
   meetLink: string | null
   etag: string | null
+  /** `created` do Google: quando o convite foi feito. A religação precisa dele. */
+  googleCreatedAt: string | null
   transcriptionMeetingId: string | null
 }
 
@@ -217,6 +219,12 @@ export interface HubStore {
   calendarEventsOverlapping(fromISO: string, toISO: string): Promise<CalendarEventRow[]>
   linkCalendarCompany(calendarEventId: string, companyId: string, linkedBy: string): Promise<void>
   calendarCompanies(calendarEventId: string): Promise<string[]>
+
+  // --- projetos do TranscriptionApp (022) ---
+  /** Empresa ligada ao projeto; ignored = projeto interno, não desce para conta nenhuma. */
+  tappProjectCompany(projectId: string): Promise<{ companyId: string | null; ignored: boolean } | null>
+  /** Grava (ou troca) a ligação. companyId null + ignored = projeto interno. */
+  linkTappProject(projectId: string, projectName: string | null, companyId: string | null, ignored: boolean): Promise<void>
   setCalendarTranscription(calendarEventId: string, meetingId: string): Promise<void>
 
   // --- inferências e aplicação ---

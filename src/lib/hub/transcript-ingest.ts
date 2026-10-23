@@ -1,3 +1,4 @@
+import { MEETING_WITH_INVITE_MIN_CHARS, MEETING_WITH_INVITE_MIN_MINUTES } from "@/lib/events/engagement"
 import { recordEvent } from "@/lib/events/record"
 import type { ParticipantRef } from "@/lib/events/types"
 import { matchSpeakers, resolveObservation, reviewDedupKey, type MeetingParticipant } from "@/lib/identity/resolve"
@@ -8,33 +9,45 @@ import type { CalendarEventRow, HubStore } from "./store"
 
 // Reunião do TranscriptionApp → evento meeting.held na conta + extração.
 //
-//   1. acha o convite: pelo google_calendar_event_id; senão por sobreposição
-//      de horário (±15 min) — e só se for UM convite candidato;
-//   2. as empresas são as do convite (calendar-ingest já ligou);
+//   1. a empresa: a do projeto escolhido no app, se ele já foi ligado a uma
+//      (022); senão a do convite — achado pelo google_calendar_event_id, ou
+//      por sobreposição de horário (±15 min) e só se for UM candidato;
+//   2. projeto ainda não ligado e sem convite → caso projeto_sem_empresa, um
+//      por projeto (resolver liga o projeto e reprocessa as reuniões dele);
 //   3. falantes em mundo fechado contra os participantes do convite;
-//   4. quem agiu: a reunião só conta como ação do cliente se houve fala de
-//      alguém que não é da Lumeis (ver clientSpokenChars);
+//   4. quem agiu (engagement.ts): fala do cliente com diarização; sem ela,
+//      convite com gente de fora + duração + transcrição longa;
 //   5. versão nova da transcrição (ou primeira) → extração → política.
 
 const OVERLAP_MS = 15 * 60 * 1000
 
 export interface TranscriptIngestResult {
   meetingId: string
-  status: "linked" | "no_calendar_event" | "no_company" | "skipped_incomplete"
+  status: "linked" | "no_calendar_event" | "no_company" | "pending_project" | "skipped_incomplete"
   companies: string[]
   extracted: boolean
   apply?: ApplyStats[]
   dropped?: number
 }
 
+/**
+ * Quando a reunião aconteceu. Gravação do desktop ou importada vem sem
+ * started_at: aí vale o created_at (a reunião é criada na hora de gravar).
+ */
+export function meetingWindow(b: TappSummaryTimes): { start: string; end: string } {
+  const start = b.started_at ?? b.created_at ?? b.updated_at
+  return { start, end: b.ended_at ?? start }
+}
+type TappSummaryTimes = Pick<TappBundle, "started_at" | "ended_at" | "updated_at" | "created_at">
+
 async function findCalendarEvent(store: HubStore, b: TappBundle): Promise<{ ev: CalendarEventRow | null; ambiguous: boolean }> {
   if (b.google_calendar_event_id) {
     const ev = await store.getCalendarEventByGoogleId(b.google_calendar_event_id)
     if (ev) return { ev, ambiguous: false }
   }
-  if (!b.started_at) return { ev: null, ambiguous: false }
-  const start = new Date(b.started_at).getTime()
-  const end = b.ended_at ? new Date(b.ended_at).getTime() : start
+  const w = meetingWindow(b)
+  const start = new Date(w.start).getTime()
+  const end = new Date(w.end).getTime()
   const candidates = (
     await store.calendarEventsOverlapping(new Date(start - OVERLAP_MS).toISOString(), new Date(end + OVERLAP_MS).toISOString())
   ).filter((e) => e.status !== "cancelled" && (!e.transcriptionMeetingId || e.transcriptionMeetingId === b.id))
@@ -84,16 +97,39 @@ export async function ingestMeeting(
     return { meetingId, status: "skipped_incomplete", companies: [], extracted: false }
   }
 
-  const { ev, ambiguous } = await findCalendarEvent(store, b)
-  let companies: string[] = ev ? await store.calendarCompanies(ev.id) : []
-  if (opts.forceCompanyId) companies = [opts.forceCompanyId]
+  const when = meetingWindow(b)
+  const mapping = b.project ? await store.tappProjectCompany(b.project.id) : null
+  const projectCompany = mapping && !mapping.ignored ? mapping.companyId : null
 
-  if (!ev && !opts.forceCompanyId) {
+  const found = await findCalendarEvent(store, b)
+  const inviteCompanies = found.ev ? await store.calendarCompanies(found.ev.id) : []
+  // Projeto escolhido no app vence o horário; à mão (attach_transcript) vence tudo.
+  const chosen = opts.forceCompanyId ?? projectCompany
+  const companies = chosen ? [chosen] : inviteCompanies
+  // O convite só entra (participantes, regra de engajamento) se for da mesma conta.
+  const ev = found.ev && (!chosen || inviteCompanies.includes(chosen)) ? found.ev : null
+  const ambiguous = found.ambiguous
+
+  if (!chosen && b.project && !mapping) {
+    // Um caso por projeto, não por reunião: resolver liga o projeto inteiro.
+    await store.openReview({
+      dedupKey: reviewDedupKey("tapp_project", b.project.id),
+      companyId: null,
+      reason: "projeto_sem_empresa",
+      observed: { project_id: b.project.id, project_name: b.project.name, meeting_id_exemplo: b.id, title: b.title, started_at: when.start },
+      candidates: [],
+    })
+    if (!found.ev || inviteCompanies.length === 0) {
+      return { meetingId, status: "pending_project", companies: [], extracted: false }
+    }
+  }
+
+  if (!ev && !chosen) {
     await store.openReview({
       dedupKey: reviewDedupKey("meeting", b.id),
       companyId: null,
       reason: ambiguous ? "reuniao_com_varios_convites" : "reuniao_sem_convite",
-      observed: { meeting_id: b.id, title: b.title, started_at: b.started_at, app_url: b.app_url },
+      observed: { meeting_id: b.id, title: b.title, started_at: when.start, app_url: b.app_url },
       candidates: [],
     })
     return { meetingId, status: "no_calendar_event", companies: [], extracted: false }
@@ -103,7 +139,7 @@ export async function ingestMeeting(
       dedupKey: reviewDedupKey("meeting", b.id),
       companyId: null,
       reason: "reuniao_sem_empresa",
-      observed: { meeting_id: b.id, title: b.title, started_at: b.started_at, calendar_event: ev?.googleEventId },
+      observed: { meeting_id: b.id, title: b.title, started_at: when.start, calendar_event: ev?.googleEventId },
       candidates: [],
     })
     return { meetingId, status: "no_company", companies: [], extracted: false }
@@ -130,6 +166,13 @@ export async function ingestMeeting(
   )
   const internalSpeakers = new Set(matches.filter((m) => m.status === "internal").map((m) => m.speakerId))
   const spoken = clientSpokenChars(b, internalSpeakers)
+  const diarized = new Set(b.utterances.map((u) => u.speaker_id)).size >= 2
+  const minutes = (new Date(when.end).getTime() - new Date(when.start).getTime()) / 60000
+  const heldWithInvite =
+    !!ev &&
+    ev.attendees.some((a) => !a.internal) &&
+    minutes >= MEETING_WITH_INVITE_MIN_MINUTES &&
+    b.transcript.length >= MEETING_WITH_INVITE_MIN_CHARS
 
   const speakerRefs: ParticipantRef[] = matches
     .filter((m): m is Extract<typeof m, { status: "person" }> => m.status === "person")
@@ -148,11 +191,21 @@ export async function ingestMeeting(
       sourceVersion: b.transcript_version,
       kind: "meeting.held",
       companyId,
-      occurredAt: b.started_at ?? b.updated_at,
+      occurredAt: when.start,
       direction: "internal",
       title: `Reunião: ${b.title}`,
-      facts: { clientSpokenChars: spoken },
-      evidence: [{ kind: "transcript", ref: b.id, url: b.app_url, locator: `${spoken} caracteres de fala externa` }],
+      facts: { clientSpokenChars: spoken, diarized, heldWithInvite },
+      evidence: [
+        {
+          kind: "transcript",
+          ref: b.id,
+          url: b.app_url,
+          locator: diarized
+            ? `${spoken} caracteres de fala externa`
+            : `sem falantes; ${Math.round(minutes)} min, ${b.transcript.length} caracteres` +
+              (ev ? `, convite ${ev.googleEventId}` : ", sem convite"),
+        },
+      ],
       participants: [...attendeeRefs, ...speakerRefs],
       sourceMeetingId: b.id,
       sourceAppUrl: b.app_url,
@@ -171,7 +224,7 @@ export async function ingestMeeting(
     const raw = await extractor.extract({
       company,
       meetingTitle: b.title,
-      meetingDate: b.started_at ?? b.updated_at,
+      meetingDate: when.start,
       participants: participants.map((p) => ({
         name: p.name ?? p.email ?? "?",
         side: p.internal ? "lumeis" : "cliente",
@@ -186,7 +239,7 @@ export async function ingestMeeting(
       sourceActivityId: recorded.id,
       sourceVersion: b.transcript_version,
       meetingId: b.id,
-      meetingDate: b.started_at ?? b.updated_at,
+      meetingDate: when.start,
       appUrl: b.app_url,
       model: EXTRACTION_MODEL,
     })
