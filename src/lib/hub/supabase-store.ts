@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
 import { personDedupKey } from "@/lib/import/dedup-key"
-import type { ParticipantRef } from "@/lib/events/types"
+import type { Evidence, ParticipantRef } from "@/lib/events/types"
 import type {
   CalendarEventRow,
   CompanyContext,
@@ -17,6 +17,8 @@ import type {
   NewPerson,
   NewReview,
   NewSignal,
+  NextStepPatch,
+  NextStepRow,
   PersonRow,
   ReviewRow,
   UpsertEventResult,
@@ -183,6 +185,7 @@ export class SupabaseHubStore implements HubStore {
           last_name: p.lastName,
           company_id: p.companyId,
           current_company: p.currentCompany,
+          current_title: p.currentTitle ?? null,
           email: p.email,
         })
       )
@@ -191,7 +194,12 @@ export class SupabaseHubStore implements HubStore {
     if (!error) return toPerson(data)
     if (error.code !== UNIQUE_VIOLATION) fail("createPerson", error)
     // dedup_key (015): a pessoa já existe com esse nome+empresa.
-    const key = personDedupKey({ first_name: p.firstName, last_name: p.lastName, current_company: p.currentCompany })
+    const key = personDedupKey({
+      first_name: p.firstName,
+      last_name: p.lastName,
+      current_title: p.currentTitle ?? null,
+      current_company: p.currentCompany,
+    })
     const { data: existing } = await this.db
       .from("people")
       .select(PERSON_COLS)
@@ -576,6 +584,70 @@ export class SupabaseHubStore implements HubStore {
     if (!error) return true
     if (error.code === UNIQUE_VIOLATION) return false
     fail("insertNextStep", error)
+  }
+
+  async nextStepsByRefPrefix(companyId: string, prefix: string): Promise<NextStepRow[]> {
+    // LIKE: % e _ do prefixo valem literalmente.
+    const pattern = `${prefix.replace(/[\\%_]/g, (c) => `\\${c}`)}%`
+    const { data, error } = await this.db
+      .from("company_next_steps")
+      .select("id, company_id, title, description, due_date, status, source_ref, inference_id")
+      .eq("workspace_id", this.workspaceId)
+      .eq("company_id", companyId)
+      .like("source_ref", pattern)
+      .limit(500)
+    if (error) fail("nextStepsByRefPrefix", error)
+    return (data ?? []).map((r) => ({
+      id: r.id as string,
+      companyId: r.company_id as string,
+      title: r.title as string,
+      description: (r.description as string) ?? null,
+      dueDate: (r.due_date as string) ?? null,
+      status: r.status as NextStepRow["status"],
+      sourceRef: (r.source_ref as string) ?? null,
+      inferenceId: (r.inference_id as string) ?? null,
+    }))
+  }
+
+  async updateNextStep(id: string, patch: NextStepPatch) {
+    const { error } = await this.db
+      .from("company_next_steps")
+      .update({
+        title: patch.title,
+        description: patch.description,
+        due_date: patch.dueDate,
+        source_ref: patch.sourceRef,
+        inference_id: patch.inferenceId,
+      })
+      .eq("id", id)
+      .eq("workspace_id", this.workspaceId)
+    if (error) fail("updateNextStep", error)
+  }
+
+  async setInferenceStatus(id: string, status: InferenceRow["status"]) {
+    const { error } = await this.db
+      .from("inferences")
+      .update({ status, decided_at: new Date().toISOString() })
+      .eq("id", id)
+      .eq("workspace_id", this.workspaceId)
+    if (error) fail("setInferenceStatus", error)
+  }
+
+  async promoteSignal(
+    companyId: string,
+    signalType: string,
+    s: { inferenceId: string; sourceActivityId: string; evidence: Evidence[] }
+  ) {
+    const { data, error } = await this.db
+      .from("company_commitment_signals")
+      .update({ inference_id: s.inferenceId, source_activity_id: s.sourceActivityId, evidence: s.evidence })
+      .eq("workspace_id", this.workspaceId)
+      .eq("company_id", companyId)
+      .eq("signal_type", signalType)
+      .not("inference_id", "is", null)
+      .select("id")
+    if (error) fail("promoteSignal", error)
+    return (data ?? []).length > 0
   }
 
   // --- cursores -----------------------------------------------------------

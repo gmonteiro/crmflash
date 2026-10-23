@@ -50,6 +50,8 @@ export interface NewPerson {
   companyId: string | null
   currentCompany: string | null
   email: string | null
+  /** Entra no dedup_key da 015, como no import e no find_or_create_person. */
+  currentTitle?: string | null
 }
 
 export interface CompanyRow {
@@ -179,6 +181,25 @@ export interface NewNextStep {
   inferenceId: string | null
 }
 
+export interface NextStepRow {
+  id: string
+  companyId: string
+  title: string
+  description: string | null
+  dueDate: string | null
+  status: "pending" | "completed"
+  sourceRef: string | null
+  inferenceId: string | null
+}
+
+export interface NextStepPatch {
+  title: string
+  description: string | null
+  dueDate: string | null
+  sourceRef: string
+  inferenceId: string | null
+}
+
 export interface NewSignal {
   companyId: string
   signalType: string
@@ -243,6 +264,17 @@ export interface HubStore {
   insertSignal(s: NewSignal): Promise<boolean>
   /** UNIQUE(workspace_id, source_ref): false se o passo já existia. */
   insertNextStep(s: NewNextStep): Promise<boolean>
+  /** Passos da empresa cujo source_ref começa com o prefixo (ex.: "tapp:<reunião>:"), abertos ou não. */
+  nextStepsByRefPrefix(companyId: string, prefix: string): Promise<NextStepRow[]>
+  updateNextStep(id: string, patch: NextStepPatch): Promise<void>
+  /** Troca o status de uma inferência (ex.: a inferida que a revisão humana substituiu vira superseded). */
+  setInferenceStatus(id: string, status: InferenceRow["status"]): Promise<void>
+  /**
+   * O sinal já existia por uma inferência (inference_id não nulo): passa a
+   * apontar para a nova, com a evidência dela. Sinal capturado à mão (sem
+   * inferência) não é tocado. true se trocou.
+   */
+  promoteSignal(companyId: string, signalType: string, s: { inferenceId: string; sourceActivityId: string; evidence: Evidence[] }): Promise<boolean>
 
   // --- cursores ---
   getCursor(source: string, key?: string): Promise<string | null>

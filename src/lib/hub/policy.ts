@@ -2,7 +2,9 @@ import { createHash } from "crypto"
 import type { Evidence } from "@/lib/events/types"
 import { normalizePersonName } from "@/lib/identity/normalize"
 import { EXTRACTION_PROMPT_VERSION, type Extraction, type ExtractionEvidence } from "./extraction"
+import { reviewedStepPrefix } from "./reviewed-fields"
 import type { CompanyContext, HubStore } from "./store"
+import { equivalentTitles, titleKey } from "./titles"
 
 // O QUE A IA PODE ESCREVER SOZINHA (tabela 6.2 do design).
 //
@@ -10,7 +12,11 @@ import type { CompanyContext, HubStore } from "./store"
 //   campo já preenchido     → só PROPÕE (vira pergunta no copiloto); nunca
 //                             sobrescreve o que você escreveu
 //   sinal                   → aplica se ainda não existe (UNIQUE por tipo)
-//   próximo passo           → cria, com prazo e dono; mesmo título aberto não duplica
+//   próximo passo           → cria, com prazo e dono; mesmo título aberto não duplica.
+//                             Reunião que você já revisou no TranscriptionApp
+//                             (reviewed-fields.ts): o equivalente a um passo
+//                             seu é pulado, e o resto vira PROPOSTA — a sua
+//                             lista daquela reunião vence a da IA
 //   estágio                 → NUNCA aplica; sempre proposta
 //
 // Toda conclusão vira uma linha em `inferences`, aplicada ou não. É de lá que
@@ -49,10 +55,6 @@ function toEvidence(evs: ExtractionEvidence[], meta: ApplyMeta): Evidence[] {
 
 function sameText(a: string | null, b: string | null): boolean {
   return (normalizePersonName(a) ?? "") === (normalizePersonName(b) ?? "")
-}
-
-function titleKey(title: string): string {
-  return normalizePersonName(title) ?? title.toLowerCase()
 }
 
 export async function applyExtraction(
@@ -133,15 +135,32 @@ export async function applyExtraction(
 
   // --- próximos passos ---
   const openTitles = new Set(company.openNextSteps.map((s) => titleKey(s.title)))
+  // O que você revisou desta reunião (abertos ou já feitos).
+  const reviewed = await store.nextStepsByRefPrefix(company.id, reviewedStepPrefix(meta.meetingId))
   for (const [i, step] of ex.next_steps.entries()) {
     const tk = titleKey(step.title)
-    if (openTitles.has(tk)) {
+    if (openTitles.has(tk) || reviewed.some((r) => equivalentTitles(r.title, step.title))) {
       stats.skipped.push(`next_step:${i}`)
+      continue
+    }
+    const field = `next_step:${createHash("sha256").update(tk).digest("hex").slice(0, 12)}`
+    if (reviewed.length > 0) {
+      // Você já disse quais são os passos desta reunião; este a IA viu e você
+      // não. Fica como proposta, com a evidência, para você decidir.
+      const { created } = await store.insertInference({
+        ...base,
+        field,
+        value: step,
+        evidence: toEvidence(step.evidence, meta),
+        status: "proposed",
+      })
+      if (created) stats.proposed.push(`next_step:${i}`)
+      else stats.skipped.push(`next_step:${i}`)
       continue
     }
     const { row } = await store.insertInference({
       ...base,
-      field: `next_step:${createHash("sha256").update(tk).digest("hex").slice(0, 12)}`,
+      field,
       value: step,
       evidence: toEvidence(step.evidence, meta),
       status: "applied",
