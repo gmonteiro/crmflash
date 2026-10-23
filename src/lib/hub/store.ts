@@ -256,6 +256,11 @@ export interface HubStore {
   hasInference(sourceActivityId: string, sourceVersion: string, field: string): Promise<boolean>
   /** Propostas abertas de versões anteriores da mesma origem viram superseded. */
   supersedeOlderInferences(sourceActivityId: string, currentVersion: string): Promise<number>
+  /**
+   * Propostas abertas do mesmo campo da mesma conta, menos a nova, viram
+   * superseded: a fila mostra só a conclusão da reunião mais recente.
+   */
+  supersedePendingField(companyId: string, field: string, keepId: string): Promise<number>
   setCompanyField(
     companyId: string,
     field: "champion_name" | "economic_buyer_name" | "pain_hypothesis",

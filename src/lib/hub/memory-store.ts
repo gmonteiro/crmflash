@@ -289,6 +289,17 @@ export class MemoryHubStore implements HubStore {
     return n
   }
 
+  async supersedePendingField(companyId: string, field: string, keepId: string) {
+    let n = 0
+    for (const inf of this.inferences.values()) {
+      if (inf.companyId === companyId && inf.field === field && inf.id !== keepId && inf.status === "proposed") {
+        inf.status = "superseded"
+        n++
+      }
+    }
+    return n
+  }
+
   async setCompanyField(
     companyId: string,
     field: "champion_name" | "economic_buyer_name" | "pain_hypothesis",

@@ -198,6 +198,18 @@ describe("ingestão da reunião", () => {
     expect(champ).toMatchObject({ status: "proposed", value: { value: "João Silva", previous: "Maria Souza" } })
   })
 
+  it("segunda reunião com outra proposta do mesmo campo: só a mais recente fica pendente", async () => {
+    store.companies.get(ACME)!.championName = "Maria Souza"
+    const src = new FakeSource([bundle(), bundle({ id: "m-2", updated_at: "2026-10-11T10:00:00+00:00" })])
+    const ex = new CountingExtractor()
+    await ingestMeeting(store, src, ex, "m-1", INTERNAL)
+    await ingestMeeting(store, src, ex, "m-2", INTERNAL)
+    const champs = [...store.inferences.values()].filter((i) => i.field === "champion")
+    expect(champs.map((c) => c.status).sort()).toEqual(["proposed", "superseded"])
+    const stages = [...store.inferences.values()].filter((i) => i.field === "stage_suggestion")
+    expect(stages.filter((c) => c.status === "proposed")).toHaveLength(1)
+  })
+
   it("reunião antiga reprocessada não rejuvenesce a conta", async () => {
     store.companies.get(ACME)!.lastClientEventAt = "2026-10-20T10:00:00.000Z"
     await ingestMeeting(store, new FakeSource([bundle()]), new CountingExtractor(), "m-1", INTERNAL)
