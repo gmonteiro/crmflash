@@ -513,7 +513,8 @@ function ruleInferenceProposed(
   // Estágio primeiro: é a decisão que muda a conta de lugar.
   const p =
     proposals.find((x) => x.field === "stage_suggestion") ??
-    proposals.find((x) => PROPOSAL_LABEL[x.field])
+    proposals.find((x) => PROPOSAL_LABEL[x.field]) ??
+    proposals.find((x) => x.field.startsWith("next_step:"))
   if (!p) return null
 
   const quote = p.evidence?.[0]?.quote
@@ -550,6 +551,37 @@ function ruleInferenceProposed(
             { kind: "move_stage", target: "title", title: target },
             { kind: "decide_inference", inferenceId: p.id, decision: "accept" },
           ],
+        },
+        reject,
+      ],
+    }
+  }
+
+  // Passo que a IA viu numa reunião que você já revisou no TranscriptionApp
+  // (policy.ts): a sua lista venceu, este fica para você decidir.
+  if (p.field.startsWith("next_step:")) {
+    const title = String(p.value?.title ?? "")
+    if (!title) return null
+    const due = typeof p.value?.due_date === "string" ? p.value.due_date : null
+    const dueLabel = due ? ` (prazo ${due.slice(8, 10)}/${due.slice(5, 7)})` : ""
+    return {
+      key: `inference_proposed:${company.id}:${p.id}`,
+      ruleId: "inference_proposed",
+      priority: 92,
+      severity: 0,
+      companyId: company.id,
+      companyName: company.name,
+      stageTitle: stage.title,
+      entityId: p.id,
+      title: `A reunião também sugere o passo "${title}"${dueLabel} para ${company.name}, fora da sua revisão. Cria?`,
+      subtitle,
+      allowFreeText: false,
+      actions: [
+        {
+          id: "accept",
+          label: "Criar passo",
+          suppressDays: 1,
+          effects: [{ kind: "decide_inference", inferenceId: p.id, decision: "accept" }],
         },
         reject,
       ],

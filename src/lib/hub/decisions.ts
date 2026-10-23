@@ -35,12 +35,32 @@ export async function decideInference(
 ): Promise<DecisionResult> {
   const { data: inf, error } = await supabase
     .from("inferences")
-    .select("id, company_id, field, value, status")
+    .select("id, company_id, field, value, status, source_activity_id")
     .eq("id", inferenceId)
     .eq("workspace_id", ctx.workspaceId)
     .maybeSingle()
   if (error || !inf) return { ok: false, detail: "proposta não encontrada" }
   if (inf.status !== "proposed") return { ok: false, detail: `proposta já está ${inf.status}` }
+
+  if (decision === "accept" && String(inf.field).startsWith("next_step:")) {
+    // Passo que a IA viu numa reunião já revisada por você (policy.ts). A
+    // chave é a própria inferência: aceitar duas vezes cai no UNIQUE.
+    const v = (inf.value ?? {}) as { title?: string; due_date?: string | null; assignee?: string | null }
+    if (!v.title) return { ok: false, detail: "proposta sem título" }
+    const { error: stepErr } = await supabase.from("company_next_steps").insert({
+      workspace_id: ctx.workspaceId,
+      user_id: ctx.userId,
+      company_id: inf.company_id,
+      title: v.title,
+      due_date: v.due_date ?? null,
+      description: v.assignee ? `Responsável: ${v.assignee}` : null,
+      status: "pending",
+      source_ref: `inf:${inf.id}`,
+      inference_id: inf.id,
+      source_activity_id: inf.source_activity_id ?? null,
+    })
+    if (stepErr && stepErr.code !== "23505") return { ok: false, detail: stepErr.message }
+  }
 
   if (decision === "accept" && CONTEXT_FIELDS[inf.field]) {
     const column = CONTEXT_FIELDS[inf.field]
@@ -77,6 +97,8 @@ interface ReviewObserved {
   domain?: string
   name?: string | null
   meeting_id?: string
+  /** Contato revisado no TranscriptionApp (reviewed-fields.ts): a atividade da reunião. */
+  activity_id?: string
 }
 
 /**
@@ -126,9 +148,20 @@ export async function resolveReview(
 
   switch (resolution.type) {
     case "link_person": {
-      if (!obs.email) return { ok: false, detail: "o caso não tem e-mail para ligar" }
-      write = await identity(resolution.personId, false)
-      detail = `${obs.email} → pessoa ${resolution.personId}`
+      if (obs.email) {
+        write = await identity(resolution.personId, false)
+        detail = `${obs.email} → pessoa ${resolution.personId}`
+      } else if (obs.activity_id) {
+        // Contato só com nome (TranscriptionApp): não há chave para gravar;
+        // a escolha liga a pessoa à reunião em que apareceu.
+        write = await supabase.from("activity_participants").upsert(
+          { workspace_id: ctx.workspaceId, activity_id: obs.activity_id, person_id: resolution.personId, role: "attendee" },
+          { onConflict: "activity_id,person_id,role", ignoreDuplicates: true }
+        )
+        detail = `${obs.name ?? "contato"} → pessoa ${resolution.personId}`
+      } else {
+        return { ok: false, detail: "o caso não tem e-mail para ligar" }
+      }
       break
     }
     case "link_company": {

@@ -18,11 +18,13 @@ import type {
   NewPerson,
   NewReview,
   NewSignal,
+  NextStepPatch,
+  NextStepRow,
   PersonRow,
   ReviewRow,
   UpsertEventResult,
 } from "./store"
-import type { ParticipantRef } from "@/lib/events/types"
+import type { Evidence, ParticipantRef } from "@/lib/events/types"
 
 // HubStore em memória para os testes. Cada Map reproduz um índice ÚNICO das
 // migrações 019–021 — se o banco recusaria a linha, este store também recusa.
@@ -54,7 +56,7 @@ export class MemoryHubStore implements HubStore {
   calendarLinks = new Set<string>() // calendarEventId|companyId
   inferences = new Map<string, InferenceRow>() // activity|version|field|prompt
   signals = new Map<string, NewSignal>() // company|type
-  nextSteps = new Map<string, NewNextStep>() // sourceRef
+  nextSteps = new Map<string, NewNextStep & { id: string; status: "pending" | "completed" }>() // sourceRef
   cursors = new Map<string, string | null>()
   projects = new Map<string, { companyId: string | null; ignored: boolean }>() // projectId
 
@@ -121,6 +123,7 @@ export class MemoryHubStore implements HubStore {
     const dedupKey = personDedupKey({
       first_name: p.firstName,
       last_name: p.lastName,
+      current_title: p.currentTitle ?? null,
       current_company: p.currentCompany,
     })
     const existing = [...this.people.values()].find((x) => x.dedupKey === dedupKey)
@@ -255,7 +258,7 @@ export class MemoryHubStore implements HubStore {
       contextInferenceIds: c.contextInferenceIds ?? {},
       signals: [...this.signals.values()].filter((s) => s.companyId === companyId).map((s) => s.signalType),
       openNextSteps: [...this.nextSteps.values()]
-        .filter((s) => s.companyId === companyId)
+        .filter((s) => s.companyId === companyId && s.status === "pending")
         .map((s) => ({ title: s.title, dueDate: s.dueDate })),
     }
   }
@@ -309,7 +312,46 @@ export class MemoryHubStore implements HubStore {
 
   async insertNextStep(s: NewNextStep) {
     if (this.nextSteps.has(s.sourceRef)) return false
-    this.nextSteps.set(s.sourceRef, s)
+    this.nextSteps.set(s.sourceRef, { ...s, id: randomUUID(), status: "pending" })
+    return true
+  }
+
+  async nextStepsByRefPrefix(companyId: string, prefix: string): Promise<NextStepRow[]> {
+    return [...this.nextSteps.values()]
+      .filter((s) => s.companyId === companyId && s.sourceRef.startsWith(prefix))
+      .map((s) => ({
+        id: s.id,
+        companyId: s.companyId,
+        title: s.title,
+        description: s.description,
+        dueDate: s.dueDate,
+        status: s.status,
+        sourceRef: s.sourceRef,
+        inferenceId: s.inferenceId,
+      }))
+  }
+
+  async updateNextStep(id: string, patch: NextStepPatch) {
+    const entry = [...this.nextSteps.entries()].find(([, s]) => s.id === id)
+    if (!entry) return
+    const [oldRef, row] = entry
+    if (patch.sourceRef !== oldRef && this.nextSteps.has(patch.sourceRef)) throw new Error("source_ref duplicado")
+    this.nextSteps.delete(oldRef)
+    this.nextSteps.set(patch.sourceRef, { ...row, ...patch })
+  }
+
+  async setInferenceStatus(id: string, status: InferenceRow["status"]) {
+    for (const inf of this.inferences.values()) if (inf.id === id) inf.status = status
+  }
+
+  async promoteSignal(
+    companyId: string,
+    signalType: string,
+    s: { inferenceId: string; sourceActivityId: string; evidence: Evidence[] }
+  ) {
+    const row = this.signals.get(`${companyId}|${signalType}`)
+    if (!row || !row.inferenceId) return false
+    Object.assign(row, s)
     return true
   }
 

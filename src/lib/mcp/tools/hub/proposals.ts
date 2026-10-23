@@ -12,8 +12,9 @@ const decideInput = z.object({
 export const decideProposal: McpTool<typeof decideInput> = {
   name: "decide_proposal",
   description:
-    "Aceita ou recusa uma proposta da IA (sugestão de estágio, ou troca de champion / " +
-    "comprador / dor já preenchidos). Aceitar uma sugestão de estágio MOVE a conta — " +
+    "Aceita ou recusa uma proposta da IA (sugestão de estágio; troca de champion / " +
+    "comprador / dor já preenchidos; ou próximo passo que a IA viu numa reunião que você " +
+    "já revisou no TranscriptionApp — aceitar cria o passo). Aceitar uma sugestão de estágio MOVE a conta — " +
     "confirme com a pessoa antes. Prefira answer_with_action quando a proposta aparecer " +
     "em whats_stuck.",
   input: decideInput,
