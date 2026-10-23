@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest"
 import { MemoryHubStore } from "./memory-store"
 import { ingestGoogleEvent } from "./calendar-ingest"
 import { clientSpokenChars, ingestMeeting, syncTranscripts } from "./transcript-ingest"
+import { linkProjectAndReingest } from "./projects"
 import { quoteIsLiteral, verifyExtraction, type Extraction, type Extractor } from "./extraction"
 import type { TappBundle, TappMeetingSummary, TranscriptionSource } from "@/lib/transcription/client"
 import type { GoogleEvent } from "@/lib/google/calendar"
@@ -288,5 +289,115 @@ describe("sync com cursor", () => {
     expect(second.processed.map((p) => p.meetingId)).toEqual(["m-2", "m-3"])
     expect(second.cursor).toBe("2026-10-12T10:00:00+00:00")
     expect(extractor.calls).toBe(3)
+  })
+})
+
+// Gravação real: sem diarização (utterances vazias, segmentos sem falante).
+const LONG = "conversa com o cliente sobre o estoque e o piloto. ".repeat(80) // ~4.000 caracteres
+function undiarized(over: Partial<TappBundle> = {}): TappBundle {
+  return bundle({
+    google_calendar_event_id: null,
+    speakers: [],
+    utterances: [],
+    transcript: LONG,
+    segments: [{ index: 1, text: LONG, start_seconds: 0, duration_seconds: 3000, speaker_id: null }],
+    ...over,
+  })
+}
+const heldOf = (id: string) => [...store.events.values()].find((e) => e.kind === "meeting.held" && e.sourceId === id)
+
+describe("reunião sem diarização", () => {
+  it("com convite, 15+ min e transcrição longa conta como ação do cliente (held_with_invite)", async () => {
+    const r = await ingestMeeting(store, new FakeSource([undiarized()]), new CountingExtractor(), "m-1", INTERNAL)
+    expect(r.status).toBe("linked")
+    expect(heldOf("m-1")).toMatchObject({ clientEngaged: true, engagementRule: "meeting.held_with_invite" })
+    expect(store.companies.get(ACME)!.lastClientEventAt).toBe("2026-10-10T16:02:00.000Z")
+  })
+
+  it("gravação curta no horário do convite não conta", async () => {
+    const b = undiarized({ ended_at: "2026-10-10T16:08:00+00:00" })
+    await ingestMeeting(store, new FakeSource([b]), new CountingExtractor(), "m-1", INTERNAL)
+    expect(heldOf("m-1")).toMatchObject({ clientEngaged: false, engagementRule: "meeting.no_client_evidence" })
+  })
+
+  it("com falantes e o cliente calado, a evidência é contra: não cai no convite", async () => {
+    const b = bundle({ utterances: [{ speaker_id: "sp-g", index: 0, text: LONG }, { speaker_id: "sp-j", index: 1, text: "ok" }] })
+    await ingestMeeting(store, new FakeSource([b]), new CountingExtractor(), "m-1", INTERNAL)
+    expect(heldOf("m-1")).toMatchObject({ clientEngaged: false, engagementRule: "meeting.no_client_evidence" })
+  })
+
+  it("sem started_at (desktop/importada), casa com o convite pelo created_at", async () => {
+    const b = undiarized({ started_at: null, created_at: "2026-10-10T16:03:00+00:00", ended_at: "2026-10-10T16:58:00+00:00" })
+    const r = await ingestMeeting(store, new FakeSource([b]), new CountingExtractor(), "m-1", INTERNAL)
+    expect(r).toMatchObject({ status: "linked", companies: [ACME] })
+    expect(heldOf("m-1")).toMatchObject({ occurredAt: "2026-10-10T16:03:00.000Z", clientEngaged: true })
+  })
+
+  it("regra nova reclassifica o mesmo fato sem duplicar nem gastar modelo", async () => {
+    const src = new FakeSource([undiarized()])
+    const ex = new CountingExtractor()
+    await ingestMeeting(store, src, ex, "m-1", INTERNAL)
+    // Como estava gravado antes da regra nova: mesmo fato, sem cliente.
+    const key = [...store.events.entries()].find(([, e]) => e.kind === "meeting.held")![0]
+    store.events.set(key, { ...store.events.get(key)!, clientEngaged: false, engagementRule: "meeting.no_client_evidence" })
+
+    await ingestMeeting(store, src, ex, "m-1", INTERNAL)
+    expect([...store.events.values()].filter((e) => e.kind === "meeting.held")).toHaveLength(1)
+    expect(heldOf("m-1")).toMatchObject({ clientEngaged: true, engagementRule: "meeting.held_with_invite" })
+    expect(ex.calls).toBe(1)
+  })
+})
+
+describe("projeto do TranscriptionApp", () => {
+  const NUVIO = { id: "proj-nuvio", name: "Nuvio" }
+  const far = { started_at: "2026-10-15T12:00:00+00:00", ended_at: "2026-10-15T13:00:00+00:00", updated_at: "2026-10-15T13:05:00+00:00" }
+
+  it("projeto sem empresa e sem convite: um caso por projeto, não por reunião", async () => {
+    const src = new FakeSource([
+      undiarized({ id: "m-a", project: NUVIO, ...far }),
+      undiarized({ id: "m-b", project: NUVIO, ...far, updated_at: "2026-10-16T13:05:00+00:00" }),
+    ])
+    const ra = await ingestMeeting(store, src, new CountingExtractor(), "m-a", INTERNAL)
+    await ingestMeeting(store, src, new CountingExtractor(), "m-b", INTERNAL)
+    expect(ra.status).toBe("pending_project")
+    expect([...store.reviews.values()].map((r) => r.reason)).toEqual(["projeto_sem_empresa"])
+    expect([...store.events.values()].some((e) => e.kind === "meeting.held")).toBe(false)
+  })
+
+  it("ligar o projeto reprocessa as reuniões dele; sem convite, entra na conta mas não zera o contador", async () => {
+    store.addCompany({ id: "co-nuvio", name: "Nuvio" })
+    const src = new FakeSource([
+      undiarized({ id: "m-a", project: NUVIO, ...far }),
+      undiarized({ id: "m-x", project: { id: "outro", name: "Outro" }, ...far }),
+    ])
+    const out = await linkProjectAndReingest(
+      store,
+      src,
+      new CountingExtractor(),
+      INTERNAL,
+      NUVIO,
+      { companyId: "co-nuvio" },
+      Date.parse("2026-10-20T00:00:00Z")
+    )
+    expect(out.map((r) => [r.meetingId, r.status])).toEqual([["m-a", "linked"]])
+    expect(heldOf("m-a")).toMatchObject({ companyId: "co-nuvio", clientEngaged: false })
+    expect(store.companies.get("co-nuvio")!.lastClientEventAt).toBeUndefined()
+  })
+
+  it("projeto ligado vence o convite de outra conta no mesmo horário", async () => {
+    store.addCompany({ id: "co-nuvio", name: "Nuvio" })
+    await store.linkTappProject(NUVIO.id, NUVIO.name, "co-nuvio", false)
+    const r = await ingestMeeting(store, new FakeSource([undiarized({ project: NUVIO })]), new CountingExtractor(), "m-1", INTERNAL)
+    expect(r.companies).toEqual(["co-nuvio"])
+    // O convite é da Acme: não serve de evidência para a Nuvio.
+    expect(heldOf("m-1")).toMatchObject({ companyId: "co-nuvio", clientEngaged: false })
+  })
+
+  it("projeto interno (ignorado) volta para o caminho do convite", async () => {
+    await store.linkTappProject("proj-lumeis", "Lumeis", null, true)
+    const b = undiarized({ project: { id: "proj-lumeis", name: "Lumeis" } })
+    const r = await ingestMeeting(store, new FakeSource([b]), new CountingExtractor(), "m-1", INTERNAL)
+    expect(r).toMatchObject({ status: "linked", companies: [ACME] })
+    expect([...store.reviews.values()].some((v) => v.reason === "projeto_sem_empresa")).toBe(false)
   })
 })

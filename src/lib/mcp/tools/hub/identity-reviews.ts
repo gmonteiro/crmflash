@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { resolveReview } from "@/lib/hub/decisions"
 import { ClaudeExtractor } from "@/lib/hub/extraction"
+import { linkProjectAndReingest } from "@/lib/hub/projects"
 import { ingestMeeting } from "@/lib/hub/transcript-ingest"
 import { internalDomains } from "@/lib/identity/normalize"
 import { TranscriptionAppClient } from "@/lib/transcription/client"
@@ -15,7 +16,7 @@ export const listIdentityReviews: McpTool<typeof listInput> = {
   description:
     "A fila de casos que a resolução de identidade não decidiu sozinha: e-mail de domínio " +
     "desconhecido, homônimos na mesma empresa, e-mail pessoal (gmail etc.), reunião sem " +
-    "convite ou sem empresa. Cada caso traz o que foi observado e os candidatos. Resolva " +
+    "convite ou sem empresa, projeto do TranscriptionApp ainda sem empresa. Cada caso traz o que foi observado e os candidatos. Resolva " +
     "com resolve_identity.",
   input: listInput,
   async handler({ supabase }, { limit }) {
@@ -35,8 +36,9 @@ const resolveInput = z.object({
   action: z
     .enum(["link_person", "link_company", "create_company", "ignore"])
     .describe(
-      "link_person: o e-mail é desta pessoa. link_company: o domínio (ou a reunião) é desta " +
-        "empresa. create_company: cria a empresa com este domínio. ignore: não é contato comercial."
+      "link_person: o e-mail é desta pessoa. link_company: o domínio (ou a reunião, ou o " +
+        "projeto do TranscriptionApp) é desta empresa. create_company: cria a empresa com este " +
+        "domínio (ou para este projeto). ignore: não é contato comercial (projeto: é interno)."
     ),
   person_id: z.string().uuid().nullable().default(null),
   company_id: z.string().uuid().nullable().default(null),
@@ -71,6 +73,54 @@ export const resolveIdentityReview: McpTool<typeof resolveInput> = {
       .eq("id", args.review_id)
       .maybeSingle()
     if (!review) throw new Error("Caso não encontrado.")
+    if (review.status !== "open") throw new Error(`Caso já está ${review.status}.`)
+
+    // Projeto do TranscriptionApp: liga o projeto inteiro e reprocessa as reuniões dele.
+    const project = review.observed as { project_id?: string; project_name?: string | null } | null
+    if (project?.project_id) {
+      let target: { companyId: string } | { ignored: true }
+      if (args.action === "link_company") {
+        if (!args.company_id) throw new Error("link_company exige company_id.")
+        target = { companyId: args.company_id }
+      } else if (args.action === "create_company") {
+        const name = args.company_name ?? project.project_name
+        if (!name) throw new Error("create_company exige company_name.")
+        const { data: created, error } = await supabase
+          .from("companies")
+          .insert({ workspace_id: workspaceId, user_id: userId, name: name.trim() })
+          .select("id")
+          .single()
+        if (error) throw new Error(`Não consegui criar a empresa: ${error.message}`)
+        target = { companyId: created.id as string }
+      } else if (args.action === "ignore") {
+        target = { ignored: true }
+      } else {
+        throw new Error("Projeto se resolve com link_company, create_company ou ignore.")
+      }
+      const store = await serviceStoreFor(identity)
+      const meetings = await linkProjectAndReingest(
+        store,
+        new TranscriptionAppClient(),
+        new ClaudeExtractor(),
+        internalDomains(),
+        { id: project.project_id, name: project.project_name ?? null },
+        target
+      )
+      await supabase
+        .from("identity_reviews")
+        .update({
+          status: "resolved",
+          resolution: "ignored" in target ? { type: "ignore" } : { type: "link_company", companyId: target.companyId },
+          resolved_by: userId,
+          resolved_at: new Date().toISOString(),
+        })
+        .eq("id", args.review_id)
+      return {
+        ok: true,
+        project: project.project_name,
+        meetings: meetings.map((m) => ({ id: m.meetingId, status: m.status, companies: m.companies, extracted: m.extracted })),
+      }
+    }
 
     // Reunião sem convite/empresa: resolver é reingerir a transcrição na empresa escolhida.
     const meetingId = (review.observed as { meeting_id?: string } | null)?.meeting_id

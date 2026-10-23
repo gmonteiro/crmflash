@@ -79,6 +79,13 @@ export interface EngagementFacts {
   rsvp?: "accepted" | "declined" | "tentative" | "needsAction"
   /** Caracteres falados por participantes de fora da Lumeis na transcrição. */
   clientSpokenChars?: number
+  /** A transcrição tem falantes (duas ou mais vozes): a regra das vozes decide sozinha. */
+  diarized?: boolean
+  /**
+   * Casou com convite que tem participante externo, durou o mínimo e rendeu
+   * transcrição longa (MEETING_WITH_INVITE_MIN_*). Só vale sem diarização.
+   */
+  heldWithInvite?: boolean
   /** Cabeçalho Auto-Submitted, X-Autoreply, assunto de ausência. */
   autoReply?: boolean
   /** O remetente é identidade ou domínio do cliente. */

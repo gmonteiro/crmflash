@@ -545,3 +545,12 @@ sem esse teto uma conta bagunçada monopoliza a fila inteira.
   - Configurar as variáveis.
   - Rodar o roteiro com uma reunião real.
   - Nada disso foi verificado contra o banco de produção: só testes com store em memória e fake.
+
+## 2026-10-23 — Hub em produção: o que o dado real mudou
+
+- **Ligado em produção:** 019–021 aplicadas, Calendar e TranscriptionApp sincronizando (PRs #4 e #5). Contas: agenda `gabriel@lumeis.ai`; no TranscriptionApp as reuniões são do usuário `gq.monteiro@gmail.com`.
+- **Série recorrente sem fim (PR #5):** `singleEvents=true` expandiu uma quinzenal até 2040 (364 ocorrências) e o primeiro sync estourou os 300 s. Convite além de 180 dias fica de fora (`CALENDAR_HORIZON_DAYS`); sync com orçamento de 240 s. As 350 linhas já gravadas foram apagadas à mão.
+- **Gravações sem diarização (decisão do Gabriel):** nenhuma gravação real tem falante, então a regra das vozes nunca disparava. Regra nova `meeting.held_with_invite`: casou com convite que tem gente de fora, ≥15 min e ≥3.000 caracteres. Com diarização e o cliente calado, a evidência é contra e a regra nova não se aplica. O mesmo fato reclassifica sem duplicar quando a regra muda (`upsertEvent`).
+- **Projeto do TranscriptionApp → empresa (022):** `tapp_project_companies`. Projeto ligado vence o horário; sem ligação, um caso `projeto_sem_empresa` por projeto, e resolver (`resolve_identity`) reprocessa as reuniões dele dos últimos 30 dias. Projeto interno = `ignore`. Reunião só pelo projeto, sem convite, entra na conta mas não zera o contador (a regra exige convite).
+- **Horário:** 8 de 21 gravações vêm sem `started_at` (desktop/importadas). Vale `started_at ?? created_at` (a API passou a expor `created_at` e `project`).
+- **Religação usava "agora":** convite antigo do cliente zerava o contador na hora do sync. Agora vem de `calendar_events.google_created_at` (022, que também zera o syncToken para o próximo sync preencher a coluna).
