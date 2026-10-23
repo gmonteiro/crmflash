@@ -3,6 +3,7 @@ import { addDays, format } from "date-fns"
 import type { CopilotEffect } from "@/types/copilot"
 import type { PipelineSnapshot } from "./types"
 import { applyStageMove } from "./move"
+import { decideInference, resolveReview } from "@/lib/hub/decisions"
 import { colById, nextStage, prevStage, stageByTitle } from "./stages"
 
 const DATE_FMT = "yyyy-MM-dd"
@@ -32,6 +33,15 @@ export async function applyEffect(
       return
 
     case "mark_client_event":
+      // Com a data real do fato: GREATEST no banco (bump_client_event, 019).
+      // Sem ela, "agora" — que é sempre >= ao que está lá.
+      if (effect.occurredAt) {
+        await supabase.rpc("bump_client_event", {
+          p_company_id: companyId,
+          p_occurred_at: effect.occurredAt,
+        })
+        return
+      }
       await supabase
         .from("companies")
         .update({ last_client_event_at: now })
@@ -133,6 +143,14 @@ export async function applyEffect(
       })
       return
     }
+
+    case "decide_inference":
+      await decideInference(supabase, { workspaceId, userId }, effect.inferenceId, effect.decision)
+      return
+
+    case "resolve_review":
+      await resolveReview(supabase, { workspaceId, userId }, effect.reviewId, effect.resolution)
+      return
 
     case "move_stage": {
       if (!snap) return

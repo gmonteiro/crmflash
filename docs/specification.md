@@ -280,7 +280,8 @@ coisa que aparece ao abrir o CRM.
   `no_next_step` (90), `frozen_candidate` (85), `stalled_card` (80),
   `no_signal_past_stage` (70), `exit_criteria_unmet` (60), `missing_champion` (50),
   `missing_pain_hypothesis` (40)
-- Teto de `COPILOT_MAX_PER_COMPANY` (4) pendências por empresa e `COPILOT_DAILY_LIMIT` (6) empresas no dia
+- Teto de `COPILOT_MAX_PER_COMPANY` (4) pendências por empresa. O painel mostra todas as empresas; `COPILOT_DAILY_LIMIT` (6) é só o default do MCP (`whats_stuck`)
+- Status `seen` (migration 018): viu o card e passou adiante. Suprime cada pendência por `SEEN_SUPPRESS_DAYS[ruleId]` (0 a 14 dias, proporcional à regra). "Adiar conta"/"Adiar tudo" usam a mesma cadência
 - Estagios terminais (Ganho/Perdido/Gelado) nao geram pergunta
 
 ### 11.2 Derivacoes compartilhadas (`src/lib/pipeline/`)

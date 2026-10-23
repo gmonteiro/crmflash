@@ -57,6 +57,8 @@ function snapshot(companyIds: string[]): PipelineSnapshot {
     nextSteps: [],
     activities: [],
     people: [],
+    proposals: [],
+    reviews: [],
   }
 }
 
@@ -81,6 +83,12 @@ describe("detectQuestions — tetos", () => {
     expect(queue).toHaveLength(6)
     // cada conta que entrou veio inteira, até o teto do card
     for (const item of queue) expect(item.pendings).toHaveLength(4)
+  })
+
+  it("sem limit, nenhuma empresa fica de fora", () => {
+    const ids = ["a", "b", "c", "d", "e", "f", "g", "h"]
+    const queue = buildCompanyQueue(detectQuestions(snapshot(ids), new Set()))
+    expect(queue).toHaveLength(8)
   })
 
   it("as pendências vêm ordenadas por prioridade dentro do card", () => {

@@ -445,6 +445,23 @@ sem esse teto uma conta bagunçada monopoliza a fila inteira.
   `queue.test.ts` e `rules.test.ts` (tetos, ordem, supressao).
 - **Design completo:** `docs/superpowers/specs/2026-08-20-copiloto-fila-por-empresa-design.md`
 
+## Copiloto: fila inteira (2026-09-10)
+
+- **Sintoma:** "so mostra 6 na fila e a cada refresh aparece mais". Era
+  `COPILOT_DAILY_LIMIT` escondendo o resto; cada resposta liberava uma vaga.
+- **Decisao:** painel sem teto de empresas (`detectQuestions` default
+  `Infinity`); `whats_stuck` continua em 6 por default (`effectiveLimit`).
+- **Nao cobrar sempre:** status `seen` (migration 018). O painel grava quando o
+  card ficou >= 3 s na tela e o usuario clicou em outra conta
+  (`seen-tracker.ts`, puro, relogio injetado). Cada pendencia some por
+  `SEEN_SUPPRESS_DAYS[ruleId]`: 0 (reuniao, passo vencido) a 14 (dor).
+  "Adiar conta"/"Adiar tudo" usam a mesma tabela; deixaram de ser 1 dia fixo.
+- **Semantica de N:** `suppress_until = hoje + N`, escondido enquanto `>= hoje`.
+  N=0 volta amanha. O "adiar para amanha" antigo (N=1) escondia por dois dias.
+- **Lateral:** lista inteira com rolagem e divisor Hoje (prioridade >= 80) /
+  Quando der.
+- **Design:** `docs/superpowers/specs/2026-09-10-copiloto-fila-inteira-design.md`
+
 ## Donos de contato (2026-08-24)
 
 - **Problema:** depois da 010 `user_id` virou autoria ("quem criou a linha") e
@@ -497,3 +514,34 @@ sem esse teto uma conta bagunçada monopoliza a fila inteira.
 - **Ponto de partida:** Guilherme em Fátima Leal (restam 1.852), Rafael em Ricardo Paiva (restam 1.732). Seed na migração 017. Consulta conferida por REST com o filtro do corte: bate nos dois números.
 - **Ordem real da tela:** lote de 26/08 (Rafael) em cima, lote de fev/mar embaixo; dentro de um lote a ordem é por id. Congelada na fila; o `/people` continua ordenável.
 - Spec: `docs/superpowers/specs/2026-09-10-triagem-por-cursor-design.md`
+
+---
+
+## 2026-10-23 — Hub de eventos (MVP: Calendar + TranscriptionApp)
+
+- **O que:** o CRM passa a registrar sozinho convites do Calendar e reuniões transcritas, com quem agiu, evidência e sem duplicar. Design: `Lumeis-ai/lumeis-workspace`, branch `gmonteiro/lead-lifecycle-spec`, `docs/superpowers/specs/2026-10-23-ecossistema-comercial-lead-design.md`. Roteiro de teste: `docs/hub/roteiro-e2e.md`.
+- **`activities` virou a tabela de eventos (019), não uma terceira timeline.**
+  - Ganhou `kind`, `idempotency_key` único por workspace, `occurred_at`, `client_engaged` e `engagement_rule`.
+  - O índice antigo `(user_id, source, source_meeting_id)` saiu, porque estourava 500 com duas pessoas na mesma reunião.
+  - `company_activities` continua como está (MCP `log_activity`, UI). A tool `timeline` lê as duas.
+- **Quem agiu é decidido em um lugar só:** `src/lib/events/engagement.ts`, com um teste por linha. O id da regra fica no evento.
+  - Reunião só conta como ação do cliente com 2+ vozes e ≥300 caracteres de quem não é da Lumeis. Motivo: o índice da diarização é arbitrário, e o nome que o app põe no falante pode não ser da voz.
+- **O reset do contador usa a data real:** `bump_client_event()` faz `GREATEST`. Antes, `mark_client_event` gravava `now()`, e reprocessar uma reunião antiga ressuscitaria a conta. Data no futuro vira agora.
+- **Identidade (020):**
+  - Tabelas `person_identities`, `company_domains`, `identity_reviews` e `companies.name_key`.
+  - Escada em `src/lib/identity/resolve.ts`: nada se funde sem chave forte.
+  - Domínio desconhecido e gmail vão SEMPRE para a fila.
+  - Falante da transcrição só é casado contra quem estava no convite.
+  - O `name_key` do SQL (`company_name_key()`) e o `companyNameKey()` do TS têm que andar juntos.
+- **IA (021):**
+  - Toda conclusão vai para `inferences`, com citação literal conferida no servidor.
+  - Campo vazio é aplicado; campo escrito à mão vira proposta.
+  - Estágio é sempre proposta: regra `inference_proposed`, e só move com o seu clique.
+- **Bug evitado:** a regra `meeting_yesterday` perguntaria "como foi?" sobre convite marcado ontem (type `meeting`), e o botão "Aconteceu" resetaria o contador. Agora ela filtra por `kind`.
+- **Cron:** `vercel.json` roda 1×/dia, porque o Hobby recusa deploy com cron mais frequente. Sob demanda, a tool `sync_now`. No Pro, trocar para `*/15 * * * *`.
+- **Testes:** `MemoryHubStore` reproduz os índices únicos das migrações. Os testes de idempotência rodam a mesma ingestão 2–3× e contam linhas.
+- **Pendente:**
+  - Aplicar 019, 020 e 021 no SQL Editor.
+  - Configurar as variáveis.
+  - Rodar o roteiro com uma reunião real.
+  - Nada disso foi verificado contra o banco de produção: só testes com store em memória e fake.

@@ -8,7 +8,6 @@ import {
   SIGNAL_EXPECTED_FROM_POSITION,
   CHAMPION_EXPECTED_FROM_POSITION,
   COMMITMENT_SIGNALS,
-  COPILOT_DAILY_LIMIT,
   COPILOT_MAX_PER_COMPANY,
 } from "@/lib/constants"
 import type { CommitmentSignalType } from "@/types/database"
@@ -29,6 +28,19 @@ interface RuleContext {
   stepsByCompany: Map<string, PipelineSnapshot["nextSteps"]>
   activitiesByCompany: Map<string, PipelineSnapshot["activities"]>
   peopleByCompany: Map<string, PipelineSnapshot["people"]>
+  proposalsByCompany: Map<string, PipelineSnapshot["proposals"]>
+  reviewsByCompany: Map<string, PipelineSnapshot["reviews"]>
+}
+
+function groupBy<T extends { company_id: string | null }>(rows: T[]): Map<string, T[]> {
+  const out = new Map<string, T[]>()
+  for (const r of rows) {
+    if (!r.company_id) continue
+    const arr = out.get(r.company_id) ?? []
+    arr.push(r)
+    out.set(r.company_id, arr)
+  }
+  return out
 }
 
 function buildContext(snap: PipelineSnapshot): RuleContext {
@@ -62,7 +74,16 @@ function buildContext(snap: PipelineSnapshot): RuleContext {
     peopleByCompany.set(p.company_id, arr)
   }
 
-  return { snap, byId: colById(snap.columns), signalsByCompany, stepsByCompany, activitiesByCompany, peopleByCompany }
+  return {
+    snap,
+    byId: colById(snap.columns),
+    signalsByCompany,
+    stepsByCompany,
+    activitiesByCompany,
+    peopleByCompany,
+    proposalsByCompany: groupBy(snap.proposals ?? []),
+    reviewsByCompany: groupBy(snap.reviews ?? []),
+  }
 }
 
 // Ação que apenas suprime a pergunta, sem escrever nada no CRM.
@@ -88,6 +109,10 @@ function ruleMeetingYesterday(
   const acts = ctx.activitiesByCompany.get(company.id) ?? []
   const recent = acts
     .filter((a) => a.type === "meeting" || a.type === "call")
+    // Convite marcado, remarcado ou cancelado é type "meeting" no hub, mas não é
+    // reunião que aconteceu: perguntar "como foi?" sobre ele (e o botão
+    // "Aconteceu" resetar o contador) seria inventar evento do cliente.
+    .filter((a) => !a.kind || a.kind === "meeting.held" || a.kind.startsWith("call."))
     .filter((a) => {
       const d = differenceInCalendarDays(ctx.snap.now, parseISO(a.date))
       return d >= 0 && d <= 2
@@ -471,6 +496,147 @@ function ruleMissingPainHypothesis(
   }
 }
 
+// 10. A IA propôs algo que só você decide: mudar de estágio, ou trocar um
+//     champion/comprador/dor que já estava escrito. Nunca é aplicado sozinho.
+const PROPOSAL_LABEL: Record<string, string> = {
+  champion: "champion",
+  economic_buyer: "comprador econômico",
+  pain_hypothesis: "hipótese de dor",
+}
+
+function ruleInferenceProposed(
+  ctx: RuleContext,
+  company: SnapshotCompany,
+  stage: SnapshotColumn
+): CopilotQuestion | null {
+  const proposals = ctx.proposalsByCompany.get(company.id) ?? []
+  // Estágio primeiro: é a decisão que muda a conta de lugar.
+  const p =
+    proposals.find((x) => x.field === "stage_suggestion") ??
+    proposals.find((x) => PROPOSAL_LABEL[x.field])
+  if (!p) return null
+
+  const quote = p.evidence?.[0]?.quote
+  const subtitle = quote ? `"${quote}"${p.evidence[0].locator ? ` — ${p.evidence[0].locator}` : ""}` : undefined
+  const reject: CopilotQuickAction = {
+    id: "reject",
+    label: "Não",
+    variant: "outline",
+    suppressDays: 1,
+    effects: [{ kind: "decide_inference", inferenceId: p.id, decision: "reject" }],
+  }
+
+  if (p.field === "stage_suggestion") {
+    const target = String(p.value?.target_stage ?? "")
+    if (!target || target === stage.title) return null
+    return {
+      key: `inference_proposed:${company.id}:${p.id}`,
+      ruleId: "inference_proposed",
+      priority: 92,
+      severity: 0,
+      companyId: company.id,
+      companyName: company.name,
+      stageTitle: stage.title,
+      entityId: p.id,
+      title: `A reunião sugere mover ${company.name} de "${stage.title}" para "${target}". Move?`,
+      subtitle,
+      allowFreeText: false,
+      actions: [
+        {
+          id: "accept",
+          label: `Mover para ${target}`,
+          suppressDays: 1,
+          effects: [
+            { kind: "move_stage", target: "title", title: target },
+            { kind: "decide_inference", inferenceId: p.id, decision: "accept" },
+          ],
+        },
+        reject,
+      ],
+    }
+  }
+
+  const value = String(p.value?.value ?? "")
+  const previous = p.value?.previous ? String(p.value.previous) : null
+  const label = PROPOSAL_LABEL[p.field]
+  return {
+    key: `inference_proposed:${company.id}:${p.id}`,
+    ruleId: "inference_proposed",
+    priority: 92,
+    severity: 0,
+    companyId: company.id,
+    companyName: company.name,
+    stageTitle: stage.title,
+    entityId: p.id,
+    title: previous
+      ? `A reunião sugere trocar o ${label} de ${company.name}: "${previous}" → "${value}". Troca?`
+      : `A reunião sugere "${value}" como ${label} de ${company.name}. Grava?`,
+    subtitle,
+    allowFreeText: false,
+    actions: [
+      {
+        id: "accept",
+        label: "Trocar",
+        suppressDays: 1,
+        effects: [{ kind: "decide_inference", inferenceId: p.id, decision: "accept" }],
+      },
+      reject,
+    ],
+  }
+}
+
+// 11. Alguém apareceu num convite ou e-mail desta conta e a escada de
+//     identidade não teve chave forte para decidir quem é. Você decide uma vez;
+//     a resposta vira identidade e a pergunta não volta.
+function ruleIdentityAmbiguous(
+  ctx: RuleContext,
+  company: SnapshotCompany,
+  stage: SnapshotColumn
+): CopilotQuestion | null {
+  const review = (ctx.reviewsByCompany.get(company.id) ?? [])[0]
+  if (!review) return null
+  const who = String(review.observed?.name ?? review.observed?.email ?? "alguém")
+  const email = review.observed?.email ? String(review.observed.email) : null
+
+  const actions: CopilotQuickAction[] = (review.candidates ?? [])
+    .filter((c) => c.personId)
+    .slice(0, 3)
+    .map((c, i) => ({
+      id: `link_${i}`,
+      label: `É ${c.label}`,
+      suppressDays: 1,
+      effects: [
+        {
+          kind: "resolve_review" as const,
+          reviewId: review.id,
+          resolution: { type: "link_person" as const, personId: c.personId! },
+        },
+      ],
+    }))
+  actions.push({
+    id: "ignore",
+    label: "Ignorar este contato",
+    variant: "outline",
+    suppressDays: 1,
+    effects: [{ kind: "resolve_review", reviewId: review.id, resolution: { type: "ignore" } }],
+  })
+
+  return {
+    key: `identity_ambiguous:${company.id}:${review.id}`,
+    ruleId: "identity_ambiguous",
+    priority: 75,
+    severity: 0,
+    companyId: company.id,
+    companyName: company.name,
+    stageTitle: stage.title,
+    entityId: review.id,
+    title: `Quem é ${who}${email && email !== who ? ` (${email})` : ""} em ${company.name}?`,
+    subtitle: review.reason.replace(/_/g, " "),
+    allowFreeText: false,
+    actions,
+  }
+}
+
 // ---------------------------------------------------------------------------
 
 const RULES = [
@@ -483,10 +649,12 @@ const RULES = [
   ruleExitCriteriaUnmet,
   ruleMissingChampion,
   ruleMissingPainHypothesis,
+  ruleInferenceProposed,
+  ruleIdentityAmbiguous,
 ] as const
 
 export interface DetectOptions {
-  /** Teto de EMPRESAS no dia (a fila é agrupada por conta). */
+  /** Teto de EMPRESAS (a fila é agrupada por conta). Sem valor, não corta. */
   limit?: number
   /** Teto de pendências por empresa — é o que cabe num card. */
   maxPerCompany?: number
@@ -500,7 +668,7 @@ export function detectQuestions(
   suppressedKeys: Set<string>,
   opts: DetectOptions = {}
 ): CopilotQuestion[] {
-  const { limit = COPILOT_DAILY_LIMIT, maxPerCompany = COPILOT_MAX_PER_COMPANY } = opts
+  const { limit = Infinity, maxPerCompany = COPILOT_MAX_PER_COMPANY } = opts
   const ctx = buildContext(snap)
   const found: CopilotQuestion[] = []
 
@@ -524,9 +692,9 @@ export function detectQuestions(
     const n = perCompany.get(q.companyId) ?? 0
     // Teto do card: acima disto a conta vira parede e ninguém responde.
     if (n >= maxPerCompany) continue
-    // Teto do dia. Só barra conta NOVA — uma empresa que já entrou continua
-    // podendo somar pendências, senão o corte cairia no meio de um card e o
-    // usuário responderia uma conta pela metade sem saber que faltava algo.
+    // Teto de empresas (só o MCP usa; o painel mostra tudo). Só barra conta
+    // NOVA — uma empresa que já entrou continua podendo somar pendências, senão
+    // o corte cairia no meio de um card.
     if (n === 0 && perCompany.size >= limit) continue
     perCompany.set(q.companyId, n + 1)
     queue.push(q)

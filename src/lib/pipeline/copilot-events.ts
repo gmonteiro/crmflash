@@ -10,7 +10,7 @@ export interface RecordCopilotEventParams {
   companyId: string
   questionKey: string
   ruleId: CopilotRuleId
-  status: "answered" | "snoozed" | "dismissed"
+  status: "answered" | "snoozed" | "dismissed" | "seen"
   suppressDays: number
   actionId?: string | null
   answerText?: string | null

@@ -20,6 +20,10 @@ import { updateCompany } from "./tools/update-company"
 import { snoozeCopilotQuestion } from "./tools/snooze-copilot-question"
 import { findOrCreateCompany } from "./tools/find-or-create-company"
 import { findOrCreatePerson } from "./tools/find-or-create-person"
+import { timeline } from "./tools/hub/timeline"
+import { listIdentityReviews, resolveIdentityReview } from "./tools/hub/identity-reviews"
+import { decideProposal, explain } from "./tools/hub/proposals"
+import { attachTranscript, linkCalendarEvent, syncNow } from "./tools/hub/ingestion"
 
 export interface McpTool<S extends z.ZodType = z.ZodType> {
   name: string
@@ -67,6 +71,15 @@ export const TOOLS: AnyMcpTool[] = [
   snoozeCopilotQuestion,
   findOrCreateCompany,
   findOrCreatePerson,
+  // Hub de eventos (019–021): leitura e decisões primeiro, ingestão por último.
+  timeline,
+  explain,
+  listIdentityReviews,
+  resolveIdentityReview,
+  decideProposal,
+  syncNow,
+  attachTranscript,
+  linkCalendarEvent,
 ]
 
 export function findTool(name: string): AnyMcpTool | undefined {

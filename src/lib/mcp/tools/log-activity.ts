@@ -16,6 +16,15 @@ const input = z.object({
         "reunião não aconteceu. Este campo controla o contador de dias sem contato — " +
         "marcar true por engano faz uma conta morta parecer viva."
     ),
+  occurred_at: z
+    .string()
+    .datetime({ offset: true })
+    .nullable()
+    .default(null)
+    .describe(
+      "Quando aconteceu de verdade (ISO 8601), se não foi agora — ex.: a ligação de " +
+        "ontem. O contador de dias sem contato usa esta data, nunca uma mais nova."
+    ),
   answers_question_key: z
     .string()
     .nullable()
@@ -52,6 +61,8 @@ export const logActivity: McpTool<typeof input> = {
     }
 
     const now = new Date().toISOString()
+    // Data no futuro não existe para o contador: vale agora.
+    const occurredAt = args.occurred_at && new Date(args.occurred_at) < new Date() ? new Date(args.occurred_at).toISOString() : now
     const { data: inserted } = await supabase
       .from("company_activities")
       .insert({
@@ -61,7 +72,7 @@ export const logActivity: McpTool<typeof input> = {
         type: args.type,
         title: args.title,
         description: args.description,
-        date: now,
+        date: occurredAt,
       })
       .select("id")
       .single()
@@ -70,7 +81,7 @@ export const logActivity: McpTool<typeof input> = {
       await applyEffect(
         supabase,
         { workspaceId, userId, companyId: args.company_id, snapshot: null },
-        { kind: "mark_client_event" }
+        occurredAt === now ? { kind: "mark_client_event" } : { kind: "mark_client_event", occurredAt }
       )
     }
 

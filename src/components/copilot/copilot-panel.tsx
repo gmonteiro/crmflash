@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect, useRef } from "react"
 import { toast } from "sonner"
 import { CheckCircle2, Sparkles, Building2 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils"
 import { CopilotCompanyCard } from "./copilot-company-card"
 import { CopilotProposalReview } from "./copilot-proposal-review"
 import { isDraftAction, useCopilot } from "@/hooks/use-copilot"
+import { createSeenTracker } from "@/lib/pipeline/seen-tracker"
 import type {
   CopilotInterpretError,
   CopilotQuestion,
@@ -45,6 +46,12 @@ const INTERPRET_ERROR_MESSAGE: Record<CopilotInterpretError, string> = {
   network: "Sem conexão com o servidor. Verifique a internet e tente de novo.",
 }
 
+// "Hoje" é o que pede ação agora: reunião, passo vencido, sem passo, gelado e
+// parado (prioridade >= 80). O resto é higiene do card e pode esperar.
+const TODAY_PRIORITY = 80
+const queueGroup = (priority: number): "today" | "later" =>
+  priority >= TODAY_PRIORITY ? "today" : "later"
+
 export function CopilotPanel({ onApplied }: CopilotPanelProps) {
   const copilot = useCopilot()
   const {
@@ -55,6 +62,7 @@ export function CopilotPanel({ onApplied }: CopilotPanelProps) {
     interpret,
     applyProposal,
     snoozeCompany,
+    markSeen,
     snoozeAll,
   } = copilot
 
@@ -62,10 +70,25 @@ export function CopilotPanel({ onApplied }: CopilotPanelProps) {
   const [busy, setBusy] = useState(false)
   const [pending, setPending] = useState<PendingProposal | null>(null)
 
+  // Um rastreador por montagem do painel: a sessão é a vida do componente.
+  const seenTracker = useRef(createSeenTracker())
+
   // A seleção é derivada: se a conta escolhida saiu da fila, cai na primeira.
   const current = queue.find((c) => c.companyId === selectedCompanyId) ?? queue[0] ?? null
   const proposal = pending && current && pending.companyId === current.companyId ? pending : null
   const pendingCount = queue.reduce((sum, c) => sum + c.pendings.length, 0)
+
+  // Toda troca de conta em foco pergunta ao rastreador se a anterior foi vista.
+  // O item é procurado na fila da sessão, que ainda o contém (seen não remove).
+  const currentCompanyId = current?.companyId ?? null
+  useEffect(() => {
+    const left = seenTracker.current.focus(currentCompanyId, Date.now())
+    if (!left) return
+    const item = queue.find((c) => c.companyId === left)
+    if (item) void markSeen(item)
+    // queue muda a cada resposta, mas só a troca de foco deve disparar isto.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentCompanyId, markSeen])
 
   const afterWrite = useCallback(
     (ok: boolean) => {
@@ -91,6 +114,7 @@ export function CopilotPanel({ onApplied }: CopilotPanelProps) {
         return
       }
 
+      seenTracker.current.skip(question.companyId)
       setBusy(true)
       const ok = await runAction(question, actionId)
       setBusy(false)
@@ -115,6 +139,7 @@ export function CopilotPanel({ onApplied }: CopilotPanelProps) {
   const handleApplyProposal = useCallback(
     async (selection: ProposalSelection) => {
       if (!current || !proposal) return
+      seenTracker.current.skip(current.companyId)
       setBusy(true)
       const ok = await applyProposal(current, proposal.proposal, selection, proposal.narration)
       setBusy(false)
@@ -127,23 +152,25 @@ export function CopilotPanel({ onApplied }: CopilotPanelProps) {
 
   const handleSnoozeCompany = useCallback(async () => {
     if (!current) return
+    seenTracker.current.skip(current.companyId)
     setBusy(true)
     const ok = await snoozeCompany(current)
     setBusy(false)
     setSelectedCompanyId(null)
     if (ok) {
-      toast.success(`${current.companyName} adiada para amanhã`)
+      toast.success(`${current.companyName} adiada`)
       onApplied?.()
     }
   }, [current, snoozeCompany, onApplied])
 
   const handleSnoozeAll = useCallback(async () => {
+    for (const item of queue) seenTracker.current.skip(item.companyId)
     const ok = await snoozeAll()
     if (ok) {
-      toast.success("Perguntas adiadas para amanhã")
+      toast.success("Perguntas adiadas")
       onApplied?.()
     }
-  }, [snoozeAll, onApplied])
+  }, [queue, snoozeAll, onApplied])
 
   return (
     <Card>
@@ -213,35 +240,50 @@ export function CopilotPanel({ onApplied }: CopilotPanelProps) {
               )}
             </div>
 
-            {queue.length > 1 && (
+            {queue.length > 0 && (
               <div className="space-y-2 lg:border-l lg:pl-6">
                 <p className="text-xs font-medium text-muted-foreground">
                   Na fila ({queue.length})
                 </p>
-                <div className="space-y-1">
-                  {queue.map((item) => (
-                    <button
-                      key={item.companyId}
-                      onClick={() => setSelectedCompanyId(item.companyId)}
-                      className={cn(
-                        "w-full rounded-md border p-2 text-left transition-colors hover:bg-muted/50",
-                        item.companyId === current.companyId
-                          ? "border-violet-500/50 bg-violet-500/5"
-                          : "border-transparent"
-                      )}
-                    >
-                      <span className="flex items-center gap-1.5 text-xs font-medium">
-                        <Building2 className="h-3 w-3 shrink-0 text-muted-foreground" />
-                        <span className="truncate">{item.companyName}</span>
-                        <span className="ml-auto shrink-0 text-[11px] font-normal text-muted-foreground">
-                          {item.pendings.length}
-                        </span>
-                      </span>
-                      <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
-                        {item.pendings[0]?.title}
-                      </span>
-                    </button>
-                  ))}
+                <div className="max-h-[32rem] space-y-1 overflow-y-auto pr-1">
+                  {queue.map((item, i) => {
+                    const group = queueGroup(item.priority)
+                    const showLabel = i === 0 || queueGroup(queue[i - 1].priority) !== group
+                    return (
+                      <div key={item.companyId}>
+                        {showLabel && (
+                          <p
+                            className={cn(
+                              "px-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground",
+                              i > 0 && "pt-3"
+                            )}
+                          >
+                            {group === "today" ? "Hoje" : "Quando der"}
+                          </p>
+                        )}
+                        <button
+                          onClick={() => setSelectedCompanyId(item.companyId)}
+                          className={cn(
+                            "w-full rounded-md border p-2 text-left transition-colors hover:bg-muted/50",
+                            item.companyId === current.companyId
+                              ? "border-violet-500/50 bg-violet-500/5"
+                              : "border-transparent"
+                          )}
+                        >
+                          <span className="flex items-center gap-1.5 text-xs font-medium">
+                            <Building2 className="h-3 w-3 shrink-0 text-muted-foreground" />
+                            <span className="truncate">{item.companyName}</span>
+                            <span className="ml-auto shrink-0 text-[11px] font-normal text-muted-foreground">
+                              {item.pendings.length}
+                            </span>
+                          </span>
+                          <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
+                            {item.pendings[0]?.title}
+                          </span>
+                        </button>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             )}

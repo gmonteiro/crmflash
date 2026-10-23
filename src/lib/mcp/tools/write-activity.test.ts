@@ -32,6 +32,7 @@ describe("log_activity", () => {
       title: "Reunião de diagnóstico",
       description: null,
       client_engaged: true,
+      occurred_at: null,
       answers_question_key: null,
     })
 
@@ -47,6 +48,7 @@ describe("log_activity", () => {
       title: "Cobrei, aguardando resposta",
       description: null,
       client_engaged: false,
+      occurred_at: null,
       answers_question_key: null,
     })
 
@@ -64,6 +66,7 @@ describe("log_activity", () => {
       title: "Reunião de diagnóstico",
       description: null,
       client_engaged: true,
+      occurred_at: null,
       answers_question_key: null,
     })
 
@@ -88,5 +91,41 @@ describe("set_next_step", () => {
       setNextStep.input.safeParse({ company_id: CO, title: "Mandar proposta", in_days: 3 })
         .success
     ).toBe(true)
+  })
+})
+
+describe("log_activity — occurred_at (hub)", () => {
+  it("ligação de ontem: o contador usa a data real, pelo GREATEST do banco", async () => {
+    const { client, calls } = fakeSupabase({ company_activities: [] })
+    await logActivity.handler(identity(client), {
+      company_id: CO,
+      type: "call",
+      title: "Ligação com o João",
+      description: null,
+      client_engaged: true,
+      occurred_at: "2026-10-01T14:00:00-03:00",
+      answers_question_key: null,
+    })
+    const rpc = calls.find((c) => c.op === "rpc")
+    expect(rpc).toMatchObject({
+      table: "bump_client_event",
+      payload: { p_company_id: CO, p_occurred_at: "2026-10-01T17:00:00.000Z" },
+    })
+    expect(calls.some((c) => c.table === "companies" && c.op === "update")).toBe(false)
+  })
+
+  it("data no futuro vale agora", async () => {
+    const { client, calls } = fakeSupabase({ company_activities: [] })
+    await logActivity.handler(identity(client), {
+      company_id: CO,
+      type: "call",
+      title: "x",
+      description: null,
+      client_engaged: true,
+      occurred_at: "2999-01-01T00:00:00Z",
+      answers_question_key: null,
+    })
+    expect(calls.some((c) => c.op === "rpc")).toBe(false)
+    expect(calls.some((c) => c.table === "companies" && c.op === "update")).toBe(true)
   })
 })

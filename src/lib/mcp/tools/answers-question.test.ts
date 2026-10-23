@@ -20,6 +20,7 @@ describe("answers_question_key em log_activity", () => {
       title: "Nota solta",
       description: null,
       client_engaged: false,
+      occurred_at: null,
       answers_question_key: null,
     })) as { suppressed?: boolean }
 
@@ -36,6 +37,7 @@ describe("answers_question_key em log_activity", () => {
       title: "Reunião de diagnóstico",
       description: null,
       client_engaged: true,
+      occurred_at: null,
       answers_question_key: `meeting_yesterday:${CO}:alguma-atividade`,
     })) as { suppressed?: boolean }
 
@@ -53,6 +55,7 @@ describe("answers_question_key em log_activity", () => {
       title: "Nota",
       description: null,
       client_engaged: false,
+      occurred_at: null,
       answers_question_key: "no_next_step:22222222-2222-4222-8222-222222222222",
     })) as { suppressed?: boolean; suppress_error?: string }
 
@@ -72,6 +75,7 @@ describe("answers_question_key em log_activity", () => {
       title: "Nota",
       description: null,
       client_engaged: false,
+      occurred_at: null,
       answers_question_key: `no_next_step:${CO}`,
     })) as { deduplicated: boolean; suppressed?: boolean }
 

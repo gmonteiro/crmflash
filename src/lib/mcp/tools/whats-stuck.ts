@@ -2,6 +2,7 @@ import { z } from "zod"
 import { fetchPipelineSnapshot } from "@/lib/pipeline/snapshot"
 import { detectQuestions } from "@/lib/pipeline/rules"
 import { buildCompanyQueue } from "@/lib/pipeline/queue"
+import { COPILOT_DAILY_LIMIT } from "@/lib/constants"
 import type { CopilotQuickAction } from "@/types/copilot"
 import { isDestructive } from "./answer-with-action"
 import type { McpTool } from "../registry"
@@ -30,6 +31,12 @@ export function offerableActions(actions: CopilotQuickAction[]): OfferedAction[]
     }))
 }
 
+// O painel mostra a fila inteira; no chat isso vira ruído. Sem pedido
+// explícito, o MCP corta em COPILOT_DAILY_LIMIT empresas.
+export function effectiveLimit(limit: number | undefined): number {
+  return limit ?? COPILOT_DAILY_LIMIT
+}
+
 const input = z.object({
   limit: z
     .number()
@@ -37,7 +44,7 @@ const input = z.object({
     .min(1)
     .max(50)
     .optional()
-    .describe("Teto de empresas na fila. Sem valor, usa o mesmo do painel."),
+    .describe("Teto de empresas na fila. Sem valor, 6."),
 })
 
 export const whatsStuck: McpTool<typeof input> = {
@@ -62,7 +69,7 @@ export const whatsStuck: McpTool<typeof input> = {
       .gte("suppress_until", today)
 
     const suppressed = new Set((events ?? []).map((e) => e.question_key as string))
-    const questions = detectQuestions(snap, suppressed, limit ? { limit } : {})
+    const questions = detectQuestions(snap, suppressed, { limit: effectiveLimit(limit) })
 
     return buildCompanyQueue(questions).map((item) => ({
       company_id: item.companyId,
