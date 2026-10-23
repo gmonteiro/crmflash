@@ -11,8 +11,9 @@
 // local e imprime o refresh token. Ele não é gravado em lugar nenhum: copie
 // para as variáveis da Vercel (Production) e para o .env.local.
 //
-// Escopos: sem argumento, só o do MVP (Calendar, leitura). Na fase 2:
-//   node --env-file=.env.local scripts/google-refresh-token.mjs calendar.readonly gmail.readonly gmail.send
+// Escopos: sem argumento, os da fase 2: Calendar (leitura), Gmail (leitura de
+// metadados e envio do resumo diário). Para só o Calendar:
+//   node --env-file=.env.local scripts/google-refresh-token.mjs calendar.readonly
 
 import http from "node:http"
 import { randomBytes } from "node:crypto"
@@ -24,7 +25,7 @@ if (!clientId || !clientSecret) {
   process.exit(1)
 }
 
-const scopes = (process.argv.slice(2).length ? process.argv.slice(2) : ["calendar.readonly"]).map((s) =>
+const scopes = (process.argv.slice(2).length ? process.argv.slice(2) : ["calendar.readonly", "gmail.readonly", "gmail.send"]).map((s) =>
   s.startsWith("https://") ? s : `https://www.googleapis.com/auth/${s}`
 )
 const PORT = 53682

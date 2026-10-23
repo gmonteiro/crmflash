@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto"
+import type { DailyReviewRow, DailyReviewStore, ReviewCompany, ReviewEvent } from "./daily-review"
 import { companyNameKey } from "@/lib/identity/normalize"
 import { personDedupKey } from "@/lib/import/dedup-key"
 import type {
@@ -42,7 +43,7 @@ export interface MemoryCompany {
   lastClientEventAt?: string | null
 }
 
-export class MemoryHubStore implements HubStore {
+export class MemoryHubStore implements HubStore, DailyReviewStore {
   readonly workspaceId = "ws-test"
 
   companies = new Map<string, MemoryCompany>()
@@ -190,6 +191,45 @@ export class MemoryHubStore implements HubStore {
 
   async addParticipants(activityId: string, refs: ParticipantRef[]) {
     for (const r of refs) this.participants.add(`${activityId}|${r.personId}|${r.role}`)
+  }
+
+  // --- revisão diária ---
+  reviewCompanies: ReviewCompany[] = []
+  reviewEvents = new Map<string, (ReviewEvent & { createdAt: string })[]>() // companyId
+  dailyReviews = new Map<string, DailyReviewRow & { createdAt: string }>() // company|date
+
+  async activeCompanies(stageTitles: string[], onlyCompanyId?: string) {
+    return this.reviewCompanies.filter((c) => stageTitles.includes(c.stageTitle) && (!onlyCompanyId || c.id === onlyCompanyId))
+  }
+
+  async eventsSince(companyId: string, sinceISO: string) {
+    return (this.reviewEvents.get(companyId) ?? []).filter((e) => e.createdAt > sinceISO)
+  }
+
+  async lastReviewAt(companyId: string) {
+    const mine = [...this.dailyReviews.values()].filter((r) => r.companyId === companyId)
+    return mine.map((r) => r.createdAt).sort().at(-1) ?? null
+  }
+
+  async dailyReview(companyId: string, reviewDate: string) {
+    return this.dailyReviews.get(`${companyId}|${reviewDate}`) ?? null
+  }
+
+  async insertDailyReview(r: DailyReviewRow) {
+    const key = `${r.companyId}|${r.reviewDate}`
+    if (this.dailyReviews.has(key)) return false
+    this.dailyReviews.set(key, { ...r, createdAt: new Date().toISOString() })
+    return true
+  }
+
+  async reviewsOn(reviewDate: string) {
+    return [...this.dailyReviews.values()]
+      .filter((r) => r.reviewDate === reviewDate)
+      .map((r) => ({ ...r, companyName: this.reviewCompanies.find((c) => c.id === r.companyId)?.name ?? "?" }))
+  }
+
+  async openIdentityReviews() {
+    return [...this.reviews.values()].filter((r) => r.status === "open").length
   }
 
   async tappProjectCompany(projectId: string) {

@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
+import type { DailyReviewRow, DailyReviewStore, ReviewCompany, ReviewEvent } from "./daily-review"
 import { personDedupKey } from "@/lib/import/dedup-key"
 import type { Evidence, ParticipantRef } from "@/lib/events/types"
 import type {
@@ -79,11 +80,25 @@ function toCalendar(r: Row): CalendarEventRow {
   }
 }
 
+function toDailyReview(r: Row): DailyReviewRow {
+  return {
+    companyId: r.company_id as string,
+    reviewDate: r.review_date as string,
+    verdict: r.verdict as DailyReviewRow["verdict"],
+    rationale: r.rationale as string,
+    evidenceActivityIds: (r.evidence_activity_ids as string[]) ?? [],
+    model: r.model as string,
+    promptVersion: r.prompt_version as string,
+    stageSuggestion: (r.stage_suggestion as string) ?? null,
+    nextStep: (r.next_step as string) ?? null,
+  }
+}
+
 const PERSON_COLS = "id, first_name, last_name, full_name, company_id, email"
 const CAL_COLS =
   "id, google_event_id, ical_uid, recurring_event_id, summary, start_at, end_at, status, organizer_email, attendees, html_link, meet_link, etag, google_created_at, transcription_meeting_id"
 
-export class SupabaseHubStore implements HubStore {
+export class SupabaseHubStore implements HubStore, DailyReviewStore {
   constructor(
     private readonly db: SupabaseClient,
     readonly workspaceId: string,
@@ -426,6 +441,151 @@ export class SupabaseHubStore implements HubStore {
       .eq("calendar_event_id", calendarEventId)
     if (error) fail("calendarCompanies", error)
     return (data ?? []).map((r) => r.company_id as string)
+  }
+
+  // --- revisão diária (024) -------------------------------------------------
+
+  async activeCompanies(stageTitles: string[], onlyCompanyId?: string): Promise<ReviewCompany[]> {
+    let q = this.db
+      .from("companies")
+      .select("id, name, last_client_event_at, champion_name, pain_hypothesis, kanban_columns!inner(title)")
+      .eq("workspace_id", this.workspaceId)
+      .in("kanban_columns.title", stageTitles)
+    if (onlyCompanyId) q = q.eq("id", onlyCompanyId)
+    const { data, error } = await q.limit(500)
+    if (error) fail("activeCompanies", error)
+    const rows = data ?? []
+    if (rows.length === 0) return []
+    const ids = rows.map((r) => r.id as string)
+    const [{ data: signals }, { data: steps }, { data: moves }] = await Promise.all([
+      this.db.from("company_commitment_signals").select("company_id, signal_type").in("company_id", ids),
+      this.db.from("company_next_steps").select("company_id, title, due_date").in("company_id", ids).eq("status", "pending"),
+      this.db.from("company_stage_events").select("company_id, occurred_at").in("company_id", ids).order("occurred_at", { ascending: false }),
+    ])
+    const lastMove = new Map<string, string>()
+    for (const m of moves ?? []) if (!lastMove.has(m.company_id as string)) lastMove.set(m.company_id as string, m.occurred_at as string)
+    return rows.map((c) => {
+      const col = c.kanban_columns as unknown as { title: string } | { title: string }[]
+      const moved = lastMove.get(c.id as string)
+      return {
+        id: c.id as string,
+        name: c.name as string,
+        stageTitle: Array.isArray(col) ? col[0].title : col.title,
+        daysInStage: moved ? Math.floor((Date.now() - Date.parse(moved)) / 86_400_000) : null,
+        lastClientEventAt: (c.last_client_event_at as string) ?? null,
+        championName: (c.champion_name as string) ?? null,
+        painHypothesis: (c.pain_hypothesis as string) ?? null,
+        signals: (signals ?? []).filter((s) => s.company_id === c.id).map((s) => s.signal_type as string),
+        openNextSteps: (steps ?? [])
+          .filter((s) => s.company_id === c.id)
+          .map((s) => ({ title: s.title as string, dueDate: (s.due_date as string) ?? null })),
+      }
+    })
+  }
+
+  async eventsSince(companyId: string, sinceISO: string): Promise<ReviewEvent[]> {
+    const [{ data: hub, error: e1 }, { data: manual, error: e2 }] = await Promise.all([
+      this.db
+        .from("activities")
+        .select("id, kind, type, title, description, occurred_at, date, client_engaged")
+        .eq("workspace_id", this.workspaceId)
+        .eq("company_id", companyId)
+        .gt("created_at", sinceISO)
+        .order("occurred_at", { ascending: true })
+        .limit(60),
+      this.db
+        .from("company_activities")
+        .select("id, type, title, description, date")
+        .eq("company_id", companyId)
+        .gt("created_at", sinceISO)
+        .order("date", { ascending: true })
+        .limit(30),
+    ])
+    if (e1) fail("eventsSince", e1)
+    if (e2) fail("eventsSince manual", e2)
+    return [
+      ...(hub ?? []).map((a) => ({
+        id: a.id as string,
+        kind: (a.kind as string) ?? (a.type as string),
+        title: a.title as string,
+        description: (a.description as string) ?? null,
+        occurredAt: ((a.occurred_at ?? a.date) as string),
+        clientEngaged: (a.client_engaged as boolean) ?? null,
+      })),
+      ...(manual ?? []).map((a) => ({
+        id: `manual:${a.id}`,
+        kind: `manual.${a.type}`,
+        title: a.title as string,
+        description: (a.description as string) ?? null,
+        occurredAt: a.date as string,
+        clientEngaged: null,
+      })),
+    ]
+  }
+
+  async lastReviewAt(companyId: string) {
+    const { data, error } = await this.db
+      .from("daily_reviews")
+      .select("created_at")
+      .eq("workspace_id", this.workspaceId)
+      .eq("company_id", companyId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+    if (error) fail("lastReviewAt", error)
+    return (data?.[0]?.created_at as string) ?? null
+  }
+
+  async dailyReview(companyId: string, reviewDate: string): Promise<DailyReviewRow | null> {
+    const { data, error } = await this.db
+      .from("daily_reviews")
+      .select("*")
+      .eq("workspace_id", this.workspaceId)
+      .eq("company_id", companyId)
+      .eq("review_date", reviewDate)
+      .maybeSingle()
+    if (error) fail("dailyReview", error)
+    return data ? toDailyReview(data) : null
+  }
+
+  async insertDailyReview(r: DailyReviewRow) {
+    const { error } = await this.db.from("daily_reviews").insert(
+      this.ws({
+        company_id: r.companyId,
+        review_date: r.reviewDate,
+        verdict: r.verdict,
+        rationale: r.rationale,
+        evidence_activity_ids: r.evidenceActivityIds,
+        model: r.model,
+        prompt_version: r.promptVersion,
+        stage_suggestion: r.stageSuggestion,
+        next_step: r.nextStep,
+      })
+    )
+    if (error && error.code !== UNIQUE_VIOLATION) fail("insertDailyReview", error)
+    return !error
+  }
+
+  async reviewsOn(reviewDate: string) {
+    const { data, error } = await this.db
+      .from("daily_reviews")
+      .select("*, companies(name)")
+      .eq("workspace_id", this.workspaceId)
+      .eq("review_date", reviewDate)
+    if (error) fail("reviewsOn", error)
+    return (data ?? []).map((r) => {
+      const co = r.companies as unknown as { name: string } | { name: string }[] | null
+      return { ...toDailyReview(r), companyName: (Array.isArray(co) ? co[0]?.name : co?.name) ?? "?" }
+    })
+  }
+
+  async openIdentityReviews() {
+    const { count, error } = await this.db
+      .from("identity_reviews")
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", this.workspaceId)
+      .eq("status", "open")
+    if (error) fail("openIdentityReviews", error)
+    return count ?? 0
   }
 
   async tappProjectCompany(projectId: string) {
