@@ -137,7 +137,10 @@ async function linkAndRecord(
     })
     stats.events++
 
-    if (previous && previous.startAt && row.startAt && previous.startAt !== row.startAt && row.status !== "cancelled") {
+    // Compara o instante, não o texto: o Google manda "…000Z", o Postgres
+    // devolve "+00:00". Comparar string criava uma remarcação falsa por convite
+    // a cada sync completo.
+    if (previous && previous.startAt && row.startAt && !sameInstant(previous.startAt, row.startAt) && row.status !== "cancelled") {
       // Cada remarcação é um fato próprio: o id carrega o novo horário.
       await recordEvent(store, {
         ...base,
@@ -196,4 +199,8 @@ export async function reingestCalendarEvent(
   const stats = emptyStats()
   await linkAndRecord(store, ev, ev, null, createdOf(ev), internal, stats)
   return stats
+}
+
+function sameInstant(a: string, b: string): boolean {
+  return new Date(a).getTime() === new Date(b).getTime()
 }
