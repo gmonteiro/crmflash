@@ -236,20 +236,57 @@ describe("ingestão da reunião", () => {
 })
 
 describe("sync com cursor", () => {
+  const NOW = Date.parse("2026-10-20T12:00:00Z")
+  const opts = { now: () => NOW }
+
   it("falha de extração segura o cursor; a próxima rodada refaz só o que falhou", async () => {
     const src = new FakeSource([
       bundle(),
       bundle({ id: "m-2", updated_at: "2026-10-11T10:00:00+00:00", google_calendar_event_id: "evt-1" }),
     ])
     const extractor = new CountingExtractor(goodExtraction, 1) // a primeira chamada falha
-    const first = await syncTranscripts(store, src, extractor, INTERNAL)
+    const first = await syncTranscripts(store, src, extractor, INTERNAL, opts)
     expect(first.failed.map((f) => f.meetingId)).toEqual(["m-1"])
     expect(first.cursor).toBe("2026-10-10T17:05:00+00:00")
 
-    const second = await syncTranscripts(store, src, extractor, INTERNAL)
+    const second = await syncTranscripts(store, src, extractor, INTERNAL, opts)
     expect(second.failed).toEqual([])
     expect(second.cursor).toBe("2026-10-11T10:00:00+00:00")
     // m-1 falhou e foi refeita; m-2 deu certo na primeira e não gastou modelo de novo.
+    expect(extractor.calls).toBe(3)
+  })
+
+  it("primeira rodada sem cursor ignora reunião anterior à janela de 30 dias", async () => {
+    const src = new FakeSource([
+      bundle({ id: "m-velha", updated_at: "2026-02-16T10:00:00+00:00", google_calendar_event_id: null }),
+      bundle(),
+    ])
+    const r = await syncTranscripts(store, src, new CountingExtractor(), INTERNAL, opts)
+    expect(r.processed.map((p) => p.meetingId)).toEqual(["m-1"])
+    expect([...store.reviews.values()].some((v) => v.reason === "reuniao_sem_convite")).toBe(false)
+    expect(r.cursor).toBe("2026-10-10T17:05:00+00:00")
+  })
+
+  it("orçamento estourado para no meio e a próxima rodada continua de onde parou", async () => {
+    const src = new FakeSource([
+      bundle(),
+      bundle({ id: "m-2", updated_at: "2026-10-11T10:00:00+00:00" }),
+      bundle({ id: "m-3", updated_at: "2026-10-12T10:00:00+00:00" }),
+    ])
+    let t = NOW
+    const clock = { now: () => t, budgetMs: 1000 }
+    const extractor = new CountingExtractor()
+    // Cada extração "leva" 600 ms: cabem duas antes de o orçamento estourar.
+    const slow: Extractor = { extract: async () => { t += 600; return extractor.extract() } }
+    const first = await syncTranscripts(store, src, slow, INTERNAL, clock)
+    expect(first.processed.map((p) => p.meetingId)).toEqual(["m-1", "m-2"])
+    expect(first.cursor).toBe("2026-10-11T10:00:00+00:00")
+
+    t = NOW
+    const second = await syncTranscripts(store, src, slow, INTERNAL, clock)
+    // m-2 volta (updated_since é inclusivo) sem gastar modelo; m-3 é extraída.
+    expect(second.processed.map((p) => p.meetingId)).toEqual(["m-2", "m-3"])
+    expect(second.cursor).toBe("2026-10-12T10:00:00+00:00")
     expect(extractor.calls).toBe(3)
   })
 })

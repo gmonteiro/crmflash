@@ -208,24 +208,51 @@ export interface SyncResult {
   cursor: string | null
 }
 
+export interface SyncOptions {
+  /** Sem cursor (primeira rodada), começa daqui, não do início do histórico. */
+  backfillDays?: number
+  /** Para de pegar reunião nova depois disso; o cursor fica onde parou. */
+  budgetMs?: number
+  now?: () => number
+}
+
+/** A mesma janela da carga cheia do Calendar: reunião mais velha não tem convite para casar. */
+export const TRANSCRIPT_BACKFILL_DAYS = 30
+/** Folga dentro dos 300 s da função para gravar o cursor e responder. */
+export const TRANSCRIPT_SYNC_BUDGET_MS = 240_000
+
 /**
  * Puxa o que mudou no TranscriptionApp desde o cursor. O cursor só avança até
  * antes da primeira falha (updated_since é inclusivo), então uma extração que
  * caiu é refeita na próxima rodada — e as que deram certo não gastam modelo de
  * novo, porque needsExtraction olha a inferência da versão.
+ *
+ * Sem cursor, olha só os últimos TRANSCRIPT_BACKFILL_DAYS: o histórico inteiro
+ * abriria um caso reuniao_sem_convite por reunião antiga. Estourado o
+ * orçamento, para e grava o cursor na última reunião processada; a próxima
+ * rodada continua dali.
  */
 export async function syncTranscripts(
   store: HubStore,
   source: TranscriptionSource,
   extractor: Extractor,
-  internal: Set<string>
+  internal: Set<string>,
+  opts: SyncOptions = {}
 ): Promise<SyncResult> {
-  const since = await store.getCursor("transcription_app")
-  const meetings = (await source.listUpdated(since)).sort((a, b) => a.updated_at.localeCompare(b.updated_at))
-  const out: SyncResult = { processed: [], failed: [], cursor: since }
+  const now = opts.now ?? Date.now
+  const started = now()
+  const budget = opts.budgetMs ?? TRANSCRIPT_SYNC_BUDGET_MS
+  const stored = await store.getCursor("transcription_app")
+  const since =
+    stored ?? new Date(started - (opts.backfillDays ?? TRANSCRIPT_BACKFILL_DAYS) * 24 * 60 * 60 * 1000).toISOString()
+  const all = (await source.listUpdated(since)).sort((a, b) => a.updated_at.localeCompare(b.updated_at))
+  const out: SyncResult = { processed: [], failed: [], cursor: stored }
   let firstFailure: string | null = null
+  let lastDone: string | null = null
 
-  for (const m of meetings) {
+  for (const m of all) {
+    if (now() - started > budget) break
+    lastDone = m.updated_at
     try {
       out.processed.push(await ingestMeeting(store, source, extractor, m.id, internal))
     } catch (e) {
@@ -234,8 +261,7 @@ export async function syncTranscripts(
     }
   }
 
-  const last = meetings.at(-1)?.updated_at ?? since
-  out.cursor = firstFailure ?? last
-  if (out.cursor !== since) await store.setCursor("transcription_app", out.cursor)
+  out.cursor = firstFailure ?? lastDone ?? stored
+  if (out.cursor && out.cursor !== stored) await store.setCursor("transcription_app", out.cursor)
   return out
 }
