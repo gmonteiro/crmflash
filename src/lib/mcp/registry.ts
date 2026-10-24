@@ -24,6 +24,7 @@ import { timeline } from "./tools/hub/timeline"
 import { listIdentityReviews, resolveIdentityReview } from "./tools/hub/identity-reviews"
 import { decideProposal, explain } from "./tools/hub/proposals"
 import { attachTranscript, dailyReview, linkCalendarEvent, syncNow } from "./tools/hub/ingestion"
+import { openItemsTool } from "./tools/hub/open-items"
 
 export interface McpTool<S extends z.ZodType = z.ZodType> {
   name: string
@@ -79,6 +80,7 @@ export const TOOLS: AnyMcpTool[] = [
   decideProposal,
   syncNow,
   dailyReview,
+  openItemsTool,
   attachTranscript,
   linkCalendarEvent,
 ]
