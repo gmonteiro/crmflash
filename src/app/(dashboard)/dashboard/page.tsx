@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Users, Building2, Kanban, Upload } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { CopilotPanel } from "@/components/copilot/copilot-panel"
+import { OpenItemsStrip } from "@/components/pendencias/open-items-strip"
 import { CompanySearch } from "@/components/dashboard/company-search"
 import Link from "next/link"
 
@@ -74,6 +75,7 @@ export default function DashboardPage() {
       </div>
 
       {/* O copiloto vem primeiro: é o que você alimenta todo dia. */}
+      <OpenItemsStrip />
       <CopilotPanel onApplied={loadStats} />
 
       {loading ? (
