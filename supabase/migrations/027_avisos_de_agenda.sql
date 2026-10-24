@@ -16,47 +16,48 @@
 --    facts.calendarNotice fica de fora; a regra gravada é o registro auditável.
 --
 -- Idempotente: rodar de novo não acha nada novo.
--- RODAR INTEIRA, DE UMA VEZ, NO SUPABASE SQL EDITOR.
+-- RODAR NO SUPABASE SQL EDITOR (já aplicada em 24/10/2026).
 
-begin;
-
-create temp table _avisos_agenda on commit drop as
-select a.id, a.company_id, a.occurred_at, a.client_engaged
-  from activities a
- where a.source = 'gmail'
-   and regexp_replace(a.title, '^E-mail( enviado)?: ', '') ~*
-       '^\s*(aceit[oa]|recusad[oa]|talvez|accepted|declined|tentative|convite( atualizado)?|invitation|updated invitation|(evento )?cancelado|cancell?ed event|nova proposta de hor[aá]rio|proposed new time)\s*:';
-
--- Contas que ficam sem referência: o contador estava no instante de um aviso.
-create temp table _contas_afetadas on commit drop as
-select distinct v.company_id
-  from _avisos_agenda v
-  join companies c on c.id = v.company_id
- where v.client_engaged
-   and c.last_client_event_at = v.occurred_at;
-
-update companies c
-   set last_client_event_at = r.novo
-  from (
-    select ca.company_id, max(a.occurred_at) as novo
-      from _contas_afetadas ca
-      join activities a
-        on a.company_id = ca.company_id
-       and a.client_engaged
-       and a.id not in (select id from _avisos_agenda)
-     group by ca.company_id
-  ) r
- where c.id = r.company_id;
-
+-- Um único comando (CTEs que escrevem): o SQL Editor não mantém tabela
+-- temporária entre comandos. Todas as CTEs leem o estado de antes.
+with avisos as (
+  select a.id, a.company_id, a.occurred_at, a.client_engaged
+    from activities a
+   where a.source = 'gmail'
+     and regexp_replace(a.title, '^E-mail( enviado)?: ', '') ~*
+         '^\s*(aceit[oa]|recusad[oa]|talvez|accepted|declined|tentative|convite( atualizado)?|invitation|updated invitation|(evento )?cancelado|cancell?ed event|nova proposta de hor[aá]rio|proposed new time)\s*:'
+),
+-- Contas cujo contador estava no instante de um aviso.
+contas as (
+  select distinct v.company_id
+    from avisos v
+    join companies c on c.id = v.company_id
+   where v.client_engaged
+     and c.last_client_event_at = v.occurred_at
+),
+novo as (
+  select ca.company_id, max(a.occurred_at) as novo
+    from contas ca
+    join activities a
+      on a.company_id = ca.company_id
+     and a.client_engaged
+     and a.id not in (select id from avisos)
+   group by ca.company_id
+),
+contador as (
+  update companies c
+     set last_client_event_at = n.novo
+    from novo n
+   where c.id = n.company_id
+  returning c.id
+)
 update activities a
    set client_engaged = false,
        conversation_key = null,
        engagement_rule = 'email.calendar_notice'
-  from _avisos_agenda v
+  from avisos v
  where a.id = v.id
    and (a.client_engaged or a.conversation_key is not null or a.engagement_rule is distinct from 'email.calendar_notice');
-
-commit;
 
 -- CONFERÊNCIA 1: avisos que sobraram com ação do cliente ou conversa (esperado: 0).
 -- select count(*) from activities
