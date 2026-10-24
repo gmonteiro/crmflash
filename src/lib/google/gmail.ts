@@ -139,6 +139,8 @@ export interface ParsedMessage {
   autoReply: boolean
   /** Lista, newsletter, notificação: não é conversa com ninguém. */
   bulk: boolean
+  /** Aviso do Google Agenda (RSVP, convite, atualização, cancelamento): não é conversa nem ação do cliente. */
+  calendarNotice: boolean
 }
 
 /** "Ana <ana@x.com>, b@y.com" → endereços. Vírgula dentro de aspas não separa. */
@@ -167,6 +169,10 @@ export function parseAddressList(raw: string | undefined): ParsedAddress[] {
 }
 
 const OOO_SUBJECT = /^(resposta autom[aá]tica|automatic reply|auto(matic)?[- ]?reply|out of (the )?office|fora do escrit[oó]rio|aus[eê]ncia|ausente|f[eé]rias)\b/i
+// Avisos do Google Agenda por e-mail, em PT e EN: o prefixo, depois ":". "Aceitação da proposta" não casa.
+// Mantido igual ao regex da migração 027.
+export const CALENDAR_NOTICE_SUBJECT =
+  /^(aceit[oa]|recusad[oa]|talvez|accepted|declined|tentative|convite( atualizado)?|invitation|updated invitation|(evento )?cancelado|cancell?ed event|nova proposta de hor[aá]rio|proposed new time)\s*:/i
 const NOREPLY = /^(no-?reply|do-?not-?reply|nao-?responda|notifica(c|ç)(o|õ)es?|notifications?|mailer-daemon|postmaster|bounce)/i
 const BULK_LABELS = ["CATEGORY_PROMOTIONS", "CATEGORY_SOCIAL", "CATEGORY_FORUMS", "CATEGORY_UPDATES", "SPAM", "TRASH"]
 
@@ -202,6 +208,10 @@ export function parseMessage(m: GmailMessage): ParsedMessage {
       (!!from && NOREPLY.test(from.email.slice(0, from.email.indexOf("@")))) ||
       labels.some((l) => BULK_LABELS.includes(l)))
 
+  const calendarNotice =
+    CALENDAR_NOTICE_SUBJECT.test(subject.trim()) ||
+    (!!from && from.email.slice(0, from.email.indexOf("@")).toLowerCase() === "calendar-notification")
+
   return {
     id: m.id,
     threadId: m.threadId,
@@ -214,5 +224,6 @@ export function parseMessage(m: GmailMessage): ParsedMessage {
     labels,
     autoReply,
     bulk,
+    calendarNotice,
   }
 }

@@ -70,6 +70,8 @@ export interface HubEventInput {
   sourceAppUrl?: string | null
   summary?: unknown
   transcript?: string | null
+  /** Conversa de mensagem (e-mail por thread, WhatsApp por chat): a base de "sem retorno". */
+  conversationKey?: string | null
 }
 
 export interface EngagementFacts {
@@ -88,6 +90,8 @@ export interface EngagementFacts {
   heldWithInvite?: boolean
   /** Cabeçalho Auto-Submitted, X-Autoreply, assunto de ausência. */
   autoReply?: boolean
+  /** Aviso do Google Agenda por e-mail (RSVP, convite, cancelamento): D4, não é ação do cliente. */
+  calendarNotice?: boolean
   /** O remetente é identidade ou domínio do cliente. */
   fromClient?: boolean
 }

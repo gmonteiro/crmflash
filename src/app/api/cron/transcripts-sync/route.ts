@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { isCronAuthorized } from "@/lib/auth/cron"
 import { SupabaseHubStore } from "@/lib/hub/supabase-store"
 import { runTranscriptSync } from "@/lib/hub/sync"
+import { markCronRun } from "@/lib/hub/crons"
 
 // Extração de uma reunião longa leva dezenas de segundos; várias numa rodada,
 // alguns minutos.
@@ -13,6 +14,7 @@ export async function GET(request: Request) {
   try {
     const store = await SupabaseHubStore.fromEnv()
     const result = await runTranscriptSync(store)
+    await markCronRun(store, "transcripts-sync")
     return NextResponse.json(result, { status: result.failed.length ? 207 : 200 })
   } catch (e) {
     console.error("[cron/transcripts-sync]", e)

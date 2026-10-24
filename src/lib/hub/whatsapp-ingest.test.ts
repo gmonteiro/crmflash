@@ -94,6 +94,7 @@ describe("eventos do dia", () => {
       clientEngaged: true,
       engagementRule: "wa.inbound",
       title: "WhatsApp: João Silva",
+      conversationKey: "whatsapp:p:+5521987654321",
     })
     expect(ev.evidence[0]).toMatchObject({ kind: "whatsapp", ref: "wamid-2", quote: "falamos quinta?", locator: "João Silva às 14:40" })
     expect(store.companies.get(ACME)!.lastClientEventAt).toBe("2026-10-22T17:40:00.000Z")

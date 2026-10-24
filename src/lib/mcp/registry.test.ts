@@ -28,8 +28,8 @@ describe("registry", () => {
 })
 
 describe("cobertura da spec", () => {
-  it("tem as 20 tools da spec + as 9 do hub de eventos (daily_review na fase 2)", () => {
-    expect(TOOLS).toHaveLength(29)
+  it("tem as 20 tools da spec + as 9 do hub de eventos (daily_review na fase 2) + open_items", () => {
+    expect(TOOLS).toHaveLength(30)
   })
 
   it("nomes únicos: o tools/list não pode ter duas tools com o mesmo nome", () => {

@@ -158,6 +158,7 @@ export async function recordDays(store: HubStore & WhatsappStore, list: WaDayEve
         },
       ],
       participants,
+      conversationKey: `whatsapp:${e.chatKey}`,
     })
     result.recorded++
   }

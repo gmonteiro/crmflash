@@ -41,6 +41,7 @@ describe("e-mail → evento", () => {
       clientEngaged: true,
       engagementRule: "email.inbound_human",
       occurredAt: "2026-10-20T14:30:00.000Z",
+      conversationKey: "gmail:t-m1",
     })
     expect(store.companies.get(ACME)!.lastClientEventAt).toBe("2026-10-20T14:30:00.000Z")
     expect(store.people.size).toBe(1)
@@ -97,6 +98,58 @@ describe("e-mail → evento", () => {
     const ev = events()[0]
     expect(ev.evidence[0]).toMatchObject({ kind: "email", ref: "m1", url: "https://mail.google.com/mail/u/0/#all/t-m1" })
     expect(ev.evidence[0].quote!.length).toBeLessThanOrEqual(280)
+  })
+})
+
+describe("aviso do Google Agenda", () => {
+  const rsvp = (subject: string, id = "c1") =>
+    msg(id, { From: "João Silva <joao@acme.com.br>", To: "Gabriel <gabriel@lumeis.ai>", Subject: subject })
+
+  it("RSVP do cliente: entra como email.received, sem conversa e sem resetar o contador", async () => {
+    await ingest(rsvp("Aceito: Reunião"))
+    expect(events()).toHaveLength(1)
+    expect(events()[0]).toMatchObject({
+      kind: "email.received",
+      clientEngaged: false,
+      engagementRule: "email.calendar_notice",
+      conversationKey: null,
+    })
+    expect(store.companies.get(ACME)!.lastClientEventAt).toBeUndefined()
+  })
+
+  it("convite atualizado enviado pela Lumeis: email.sent sem conversa", async () => {
+    await ingest(
+      msg("c2", { From: "Gabriel <gabriel@lumeis.ai>", To: "joao@acme.com.br", Subject: "Convite atualizado: Reunião @ qui" })
+    )
+    expect(events()[0]).toMatchObject({ kind: "email.sent", clientEngaged: false, conversationKey: null })
+  })
+
+  it("remetente calendar-notification, mesmo com outro assunto, é aviso", async () => {
+    await ingest(msg("c3", { From: "Google Agenda <calendar-notification@acme.com.br>", To: "gabriel@lumeis.ai", Subject: "Lembrete" }))
+    expect(parseMessage(msg("c3", { From: "calendar-notification@google.com", Subject: "x" })).calendarNotice).toBe(true)
+  })
+
+  it("e-mail normal segue sendo ação do cliente, com conversa", async () => {
+    await ingest(rsvp("Re: Proposta", "c4"))
+    expect(events()[0]).toMatchObject({ clientEngaged: true, conversationKey: "gmail:t-c4" })
+    expect(store.companies.get(ACME)!.lastClientEventAt).toBe("2026-10-20T14:30:00.000Z")
+  })
+
+  it("assunto sem o prefixo com dois-pontos não é aviso", () => {
+    for (const s of ["Aceitação da proposta", "Aceito a proposta", "Convite para o evento", "Re: Aceito: Reunião"]) {
+      expect(parseMessage(rsvp(s)).calendarNotice, s).toBe(false)
+    }
+  })
+
+  it("cobre os prefixos PT e EN", () => {
+    for (const s of [
+      "Aceito: X", "Aceita: X", "Accepted: X", "Recusado: X", "Declined: X", "Talvez: X", "Tentative: X",
+      "Convite: X", "Convite atualizado: X", "Invitation: X", "Updated invitation: X", "Cancelado: X",
+      "Evento cancelado: X", "Canceled event: X", "Cancelled event: X", "Nova proposta de horário: X",
+      "Proposed new time: X", "  ACEITO : X",
+    ]) {
+      expect(parseMessage(rsvp(s)).calendarNotice, s).toBe(true)
+    }
   })
 })
 

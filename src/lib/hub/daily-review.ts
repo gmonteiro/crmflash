@@ -5,6 +5,7 @@ import { z } from "zod"
 import { STAGE_EXIT_CRITERIA } from "@/lib/constants"
 import type { Evidence } from "@/lib/events/types"
 import { EXTRACTION_MODEL } from "./extraction"
+import type { ConversationItem } from "./open-items"
 import type { HubStore } from "./store"
 
 // Revisão diária das contas ativas (spec, seção 8).
@@ -291,13 +292,14 @@ export async function runDailyReview(
 export interface Digest {
   subject: string
   html: string
-  counts: { risco: number; sugestoes: number; fila: number; avanco: number }
+  counts: { risco: number; sugestoes: number; aguardandoVoce: number; aguardandoCliente: number; decisoes: number; avanco: number }
 }
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]!)
 
 /**
- * Ordem da spec: riscos, sugestões de estágio, fila de identidade, avanços.
+ * Ordem: alertas do sistema, aguardando você, aguardando o cliente, riscos,
+ * sugestões de estágio, decisões abertas, avanços.
  * Sem nada disso, null: não manda e-mail.
  */
 /** Sem batimento do coletor de WhatsApp há mais disto, o resumo avisa. */
@@ -322,21 +324,30 @@ export function heartbeatAlert(lastBeat: string | null, now: number): string | n
 export function composeDigest(
   today: string,
   rows: (DailyReviewRow & { companyName: string })[],
-  openIdentity: number,
+  openDecisions: number,
   appUrl: string,
-  alerts: string[] = []
+  alerts: string[] = [],
+  pend: { waitingYou: ConversationItem[]; waitingClient: ConversationItem[] } = { waitingYou: [], waitingClient: [] }
 ): Digest | null {
   const risco = rows.filter((r) => r.verdict === "risco")
   const sugestoes = rows.filter((r) => r.stageSuggestion || r.nextStep)
   const avanco = rows.filter((r) => r.verdict === "avanco")
-  if (!alerts.length && !risco.length && !sugestoes.length && !avanco.length && openIdentity === 0) return null
+  if (!alerts.length && !pend.waitingYou.length && !pend.waitingClient.length && !risco.length && !sugestoes.length && !avanco.length && openDecisions === 0) return null
 
   const card = (r: DailyReviewRow & { companyName: string }, extra = "") =>
     `<li><a href="${appUrl}/companies/${r.companyId}"><b>${esc(r.companyName)}</b></a>: ${esc(r.rationale)}${extra}</li>`
   const section = (title: string, items: string[]) => (items.length ? `<h3>${title}</h3><ul>${items.join("")}</ul>` : "")
 
+  const ago = (h: number) => (h >= 48 ? `${Math.floor(h / 24)} dias` : `${h} h`)
+  const conv = (c: ConversationItem) =>
+    `<li><a href="${appUrl}/companies/${c.companyId}"><b>${esc(c.companyName)}</b></a>: ${esc(c.title)} — há ${ago(c.ageHours)}${c.preview ? ` <i>“${esc(c.preview.slice(-140))}”</i>` : ""}</li>`
+  const pendLink = `<p><a href="${appUrl}/pendencias">Abrir Pendências</a></p>`
+
   const html = [
     alerts.length ? `<p style="color:#b91c1c"><b>${alerts.map(esc).join("<br/>")}</b></p>` : "",
+    section(`Aguardando você (${pend.waitingYou.length})`, pend.waitingYou.map(conv)),
+    section(`Aguardando o cliente (${pend.waitingClient.length})`, pend.waitingClient.map(conv)),
+    pend.waitingYou.length || pend.waitingClient.length ? pendLink : "",
     `<p>Revisão de ${today}. Nada aqui mudou o funil: estágio só muda quando você confirmar no copiloto.</p>`,
     section(`Riscos (${risco.length})`, risco.map((r) => card(r))),
     section(
@@ -348,18 +359,20 @@ export function composeDigest(
         )
       )
     ),
-    openIdentity ? `<h3>Fila de identidade</h3><p>${openIdentity} caso(s) esperando você: <code>list_identity_reviews</code>.</p>` : "",
+    openDecisions ? `<h3>Decisões abertas</h3><p>${openDecisions} esperando você em <a href="${appUrl}/pendencias">Pendências</a>.</p>` : "",
     section(`Avanços (${avanco.length})`, avanco.map((r) => card(r))),
   ].join("\n")
 
   const parts = [
+    pend.waitingYou.length ? `${pend.waitingYou.length} aguardando você` : null,
+    pend.waitingClient.length ? `${pend.waitingClient.length} aguardando o cliente` : null,
     risco.length ? `${risco.length} risco${risco.length > 1 ? "s" : ""}` : null,
     sugestoes.length ? `${sugestoes.length} sugest${sugestoes.length > 1 ? "ões" : "ão"}` : null,
     avanco.length ? `${avanco.length} avanço${avanco.length > 1 ? "s" : ""}` : null,
   ].filter(Boolean)
   return {
-    subject: `CRM ${today}: ${parts.join(", ") || (alerts.length ? "alerta do WhatsApp" : `${openIdentity} na fila`)}`,
+    subject: `CRM ${today}: ${parts.join(", ") || (alerts.length ? "alerta do sistema" : `${openDecisions} decisões abertas`)}`,
     html,
-    counts: { risco: risco.length, sugestoes: sugestoes.length, fila: openIdentity, avanco: avanco.length },
+    counts: { risco: risco.length, sugestoes: sugestoes.length, aguardandoVoce: pend.waitingYou.length, aguardandoCliente: pend.waitingClient.length, decisoes: openDecisions, avanco: avanco.length },
   }
 }

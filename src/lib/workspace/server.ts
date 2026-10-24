@@ -19,3 +19,15 @@ export async function getWorkspaceId(
 
   return data?.workspace_id ?? null
 }
+
+/** O hub store com o cliente do usuário: a RLS escopa leitura e escrita ao workspace dele. */
+export async function sessionHubStore() {
+  const { createServerSupabaseClient } = await import("@/lib/supabase/server")
+  const { SupabaseHubStore } = await import("@/lib/hub/supabase-store")
+  const supabase = await createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
+  const workspaceId = await getWorkspaceId(supabase, user.id)
+  if (!workspaceId) return null
+  return { supabase, userId: user.id, workspaceId, store: new SupabaseHubStore(supabase, workspaceId, user.id) }
+}
