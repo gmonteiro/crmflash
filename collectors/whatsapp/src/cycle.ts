@@ -57,6 +57,8 @@ export async function runCycle(
   let linked = 0
 
   for (const chat of chats) {
+    // Conversa 1:1 com alguém da Lumeis (inclusive a sua com você mesmo) não é de cliente.
+    if (chat.type === "direct" && chat.phoneDigits && opts.internalDigits.has(chat.phoneDigits)) continue
     const r = matchChat(chat, idx)
     if (r.status === "ignored") continue
     if (r.status === "candidate") {

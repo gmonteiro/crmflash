@@ -127,4 +127,12 @@ describe("ciclo do coletor", () => {
     await expect(runCycle(src, crm, state, { now: NOW, internalDigits: new Set() })).rejects.toThrow("503")
     expect(state.sent).toEqual({})
   })
+
+  it("conversa 1:1 com telefone da Lumeis (a sua, inclusive) nunca vira candidata nem é lida", async () => {
+    const src = source()
+    const crm = new FakeCrm()
+    await runCycle(src, crm, fresh(), { now: NOW, internalDigits: new Set(["5521955554444", "5521900000001"]) })
+    expect(crm.sentCandidates).toEqual([])
+    expect(src.asked).toEqual([])
+  })
 })

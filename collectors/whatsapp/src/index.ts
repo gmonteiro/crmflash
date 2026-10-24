@@ -26,7 +26,8 @@ const internal = new Set(
 
 const client = new Client({
   authStrategy: new LocalAuth({ dataPath: SESSION, clientId: "crm" }),
-  puppeteer: { headless: true, args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"] },
+  // getChats numa conta grande passa dos 180 s padrão do CDP na primeira carga.
+  puppeteer: { headless: true, protocolTimeout: 600_000, args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"] },
 })
 const crm = crmClient(CRM_URL, TOKEN)
 let reader: ReadOnlyWhatsApp | null = null
