@@ -5,7 +5,8 @@
   "description": "Leitor local, só leitura, do WhatsApp para o CRM Flash",
   "scripts": {
     "start": "tsx src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "dotenv": "^16.4.7",
@@ -16,6 +17,7 @@
   "devDependencies": {
     "@types/node": "^22.10.0",
     "@types/qrcode": "^1.5.6",
+    "patch-package": "^8.0.1",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0"
   }
