@@ -5,6 +5,9 @@ import type { Evidence, ParticipantRef } from "@/lib/events/types"
 import type {
   CalendarEventRow,
   CompanyContext,
+  ConversationEventRow,
+  CursorRow,
+  DismissalRow,
   DomainRow,
   EventRow,
   HubStore,
@@ -20,7 +23,11 @@ import type {
   NewSignal,
   NextStepPatch,
   NextStepRow,
+  OpenItemsStore,
+  OpenReviewItemRow,
   PersonRow,
+  ProposedInferenceRow,
+  ReviewCandidate,
   ReviewRow,
   UpsertEventResult,
   WhatsappDirectorySource,
@@ -35,6 +42,17 @@ import type {
 const UNIQUE_VIOLATION = "23505"
 
 type Row = Record<string, unknown>
+
+/** timestamptz do Supabase vem como "+00:00"; normaliza para "…Z" para comparar como texto. */
+function iso(x: string): string {
+  return new Date(x).toISOString()
+}
+/** Cursor é texto livre (pode não ser data): normaliza só quando for um instante válido. */
+function isoOrRaw(x: string | null): string | null {
+  if (x == null) return null
+  const t = new Date(x)
+  return Number.isNaN(t.getTime()) ? x : t.toISOString()
+}
 
 function fail(what: string, error: { message: string } | null): never {
   throw new Error(`${what}: ${error?.message ?? "erro desconhecido"}`)
@@ -100,7 +118,7 @@ const PERSON_COLS = "id, first_name, last_name, full_name, company_id, email"
 const CAL_COLS =
   "id, google_event_id, ical_uid, recurring_event_id, summary, start_at, end_at, status, organizer_email, attendees, html_link, meet_link, etag, google_created_at, transcription_meeting_id"
 
-export class SupabaseHubStore implements HubStore, DailyReviewStore, WhatsappStore {
+export class SupabaseHubStore implements HubStore, DailyReviewStore, WhatsappStore, OpenItemsStore {
   constructor(
     private readonly db: SupabaseClient,
     readonly workspaceId: string,
@@ -916,6 +934,124 @@ export class SupabaseHubStore implements HubStore, DailyReviewStore, WhatsappSto
   }
 
   // --- cursores -----------------------------------------------------------
+
+  // --- pendências (026) ----------------------------------------------------
+
+  async conversationEvents(sinceISO: string): Promise<ConversationEventRow[]> {
+    const rows = await this.allRows<Row>("conversationEvents", (a, b) =>
+      this.db
+        .from("activities")
+        .select("conversation_key, kind, client_engaged, occurred_at, company_id, title, description, evidence, companies(name)")
+        .eq("workspace_id", this.workspaceId)
+        .not("conversation_key", "is", null)
+        .gte("occurred_at", sinceISO)
+        .range(a, b)
+    )
+    return rows.map((r) => {
+      const co = r.companies as unknown as { name: string } | { name: string }[] | null
+      const ev = (r.evidence as { url?: string }[] | null) ?? []
+      return {
+        conversationKey: r.conversation_key as string,
+        kind: r.kind as ConversationEventRow["kind"],
+        clientEngaged: !!r.client_engaged,
+        occurredAt: iso(r.occurred_at as string),
+        companyId: r.company_id as string,
+        companyName: (Array.isArray(co) ? co[0]?.name : co?.name) ?? "?",
+        title: r.title as string,
+        description: (r.description as string) ?? null,
+        url: ev[0]?.url ?? null,
+      }
+    })
+  }
+
+  async dismissals(): Promise<DismissalRow[]> {
+    const { data, error } = await this.db
+      .from("conversation_dismissals")
+      .select("conversation_key, side, dismissed_through")
+      .eq("workspace_id", this.workspaceId)
+    if (error) fail("dismissals", error)
+    return (data ?? []).map((d) => ({
+      conversationKey: d.conversation_key as string,
+      side: d.side as DismissalRow["side"],
+      dismissedThrough: iso(d.dismissed_through as string),
+    }))
+  }
+
+  async dismissConversation(d: DismissalRow & { reason: string | null; dismissedBy: string | null }) {
+    const { error } = await this.db.from("conversation_dismissals").upsert(
+      this.ws({
+        conversation_key: d.conversationKey,
+        side: d.side,
+        dismissed_through: d.dismissedThrough,
+        reason: d.reason,
+        dismissed_by: d.dismissedBy,
+        created_at: new Date().toISOString(),
+      }),
+      { onConflict: "workspace_id,conversation_key,side" }
+    )
+    if (error) fail("dismissConversation", error)
+  }
+
+  async openReviewItems(): Promise<OpenReviewItemRow[]> {
+    const { data, error } = await this.db
+      .from("identity_reviews")
+      .select("id, reason, observed, candidates, company_id, created_at, companies(name)")
+      .eq("workspace_id", this.workspaceId)
+      .eq("status", "open")
+      .order("created_at", { ascending: true })
+      .limit(500)
+    if (error) fail("openReviewItems", error)
+    return (data ?? []).map((r) => {
+      const co = r.companies as unknown as { name: string } | { name: string }[] | null
+      return {
+        id: r.id as string,
+        reason: r.reason as string,
+        observed: (r.observed as Record<string, unknown>) ?? {},
+        candidates: (r.candidates as ReviewCandidate[]) ?? [],
+        companyId: (r.company_id as string) ?? null,
+        companyName: (Array.isArray(co) ? co[0]?.name : co?.name) ?? null,
+        createdAt: iso(r.created_at as string),
+      }
+    })
+  }
+
+  async proposedInferences(): Promise<ProposedInferenceRow[]> {
+    const { data, error } = await this.db
+      .from("inferences")
+      .select("id, company_id, field, value, created_at, companies(name)")
+      .eq("workspace_id", this.workspaceId)
+      .eq("status", "proposed")
+      .order("created_at", { ascending: true })
+      .limit(500)
+    if (error) fail("proposedInferences", error)
+    return (data ?? []).map((r) => {
+      const co = r.companies as unknown as { name: string } | { name: string }[] | null
+      return {
+        id: r.id as string,
+        companyId: r.company_id as string,
+        companyName: (Array.isArray(co) ? co[0]?.name : co?.name) ?? "?",
+        field: r.field as string,
+        value: r.value,
+        createdAt: iso(r.created_at as string),
+      }
+    })
+  }
+
+  async systemCursors(): Promise<CursorRow[]> {
+    const { data, error } = await this.db
+      .from("sync_cursors")
+      .select("source, key, cursor, updated_at")
+      .eq("workspace_id", this.workspaceId)
+      .in("source", ["cron", "whatsapp"])
+    if (error) fail("systemCursors", error)
+    return (data ?? []).map((c) => ({
+      source: c.source as string,
+      key: c.key as string,
+      cursor: isoOrRaw(c.cursor as string | null),
+      updatedAt: iso(c.updated_at as string),
+    }))
+  }
+
 
   async getCursor(source: string, key = "default") {
     const { data, error } = await this.db
