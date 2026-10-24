@@ -169,6 +169,11 @@ describe("resumo: pendências", () => {
     expect(d.html).toContain('href="https://crm.example/pendencias"')
   })
 
+  it("só aguardando o cliente: o assunto diz isso, não '0 decisões abertas'", () => {
+    const d = composeDigest("2026-10-24", [], 0, "https://crm.example", [], { waitingYou: [], waitingClient: [conv("gmail:t1", 200)] })!
+    expect(d.subject).toBe("CRM 2026-10-24: 1 aguardando o cliente")
+  })
+
   it("ordem: sistema, aguardando você, aguardando o cliente, riscos", () => {
     const rows = [
       { companyId: "b", companyName: "B", reviewDate: "2026-10-24", verdict: "risco" as const, rationale: "sumiu", evidenceActivityIds: [], model: "m", promptVersion: "p", stageSuggestion: null, nextStep: null },

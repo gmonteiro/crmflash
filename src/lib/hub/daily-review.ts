@@ -365,6 +365,7 @@ export function composeDigest(
 
   const parts = [
     pend.waitingYou.length ? `${pend.waitingYou.length} aguardando você` : null,
+    pend.waitingClient.length ? `${pend.waitingClient.length} aguardando o cliente` : null,
     risco.length ? `${risco.length} risco${risco.length > 1 ? "s" : ""}` : null,
     sugestoes.length ? `${sugestoes.length} sugest${sugestoes.length > 1 ? "ões" : "ão"}` : null,
     avanco.length ? `${avanco.length} avanço${avanco.length > 1 ? "s" : ""}` : null,

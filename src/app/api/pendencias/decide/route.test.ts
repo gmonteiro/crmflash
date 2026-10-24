@@ -42,6 +42,20 @@ describe("POST /api/pendencias/decide — guardas", () => {
     expect(decideInference).not.toHaveBeenCalled()
   })
 
+  it("aceitar sugestão de estágio: 400 e não decide", async () => {
+    lookup = { data: { field: "stage_suggestion" }, error: null }
+    const res = await POST(req({ type: "inference", id: ID, decision: "accept" }))
+    expect(res.status).toBe(400)
+    expect(decideInference).not.toHaveBeenCalled()
+  })
+
+  it("caso inexistente: 404 e não resolve", async () => {
+    lookup = { data: null, error: null }
+    const res = await POST(req({ type: "review", id: ID, resolution: { type: "ignore" } }))
+    expect(res.status).toBe(404)
+    expect(resolveReview).not.toHaveBeenCalled()
+  })
+
   it("erro na leitura do caso: 500 e não resolve", async () => {
     lookup = { data: null, error: { message: "boom" } }
     const res = await POST(req({ type: "review", id: ID, resolution: { type: "ignore" } }))

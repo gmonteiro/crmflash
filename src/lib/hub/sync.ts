@@ -6,7 +6,7 @@ import { emptyStats, ingestGoogleEvent, relinkPending, type CalendarIngestStats 
 import { ClaudeReviewer, composeDigest, runDailyReview, type DailyReviewStore } from "./daily-review"
 import { ClaudeExtractor } from "./extraction"
 import { syncGmail, type GmailSource } from "./gmail-ingest"
-import { openItems } from "./open-items"
+import { openItemsForDigest } from "./open-items"
 import type { HubStore, OpenItemsStore } from "./store"
 import { syncTranscripts, type SyncResult } from "./transcript-ingest"
 
@@ -89,18 +89,11 @@ export async function runDailyReviewAndDigest(store: HubStore & DailyReviewStore
 
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "https://crmflash.vercel.app").replace(/\/$/, "")
   // Tudo que espera você, da mesma função da página /pendencias.
-  const items = await openItems(store, { now: Date.now() })
-  const digest = composeDigest(
-    review.today,
-    await store.reviewsOn(review.today),
-    items.decisions.length,
-    appUrl,
-    items.system.map((s) => s.message),
-    {
-      waitingYou: items.waitingYou.filter((c) => c.ageHours > 24),
-      waitingClient: items.waitingClient.filter((c) => c.ageHours > 7 * 24),
-    }
-  )
+  const items = await openItemsForDigest(store, Date.now())
+  const digest = composeDigest(review.today, await store.reviewsOn(review.today), items.decisions, appUrl, items.alerts, {
+    waitingYou: items.waitingYou.filter((c) => c.ageHours > 24),
+    waitingClient: items.waitingClient.filter((c) => c.ageHours > 7 * 24),
+  })
   const to = process.env.DIGEST_TO_EMAIL
   let sent: string | null = null
   if (digest && to && review.complete && (await store.getCursor("daily_digest")) !== review.today) {

@@ -75,7 +75,7 @@ function toItem(e: ConversationEventRow, now: number): ConversationItem {
     preview: e.description ? e.description.slice(-200) : null,
     url: e.url,
     lastAt: e.occurredAt,
-    ageHours: Math.floor((now - Date.parse(e.occurredAt)) / HOUR),
+    ageHours: Math.max(0, Math.floor((now - Date.parse(e.occurredAt)) / HOUR)),
   }
 }
 
@@ -179,4 +179,29 @@ export async function openItems(store: OpenItemsStore, opts: { now: number }): P
   }
 
   return { generatedAt: new Date(now).toISOString(), waitingYou, waitingClient, decisions, system }
+}
+
+/**
+ * As pendências do resumo diário. Se a leitura falhar, o resumo ainda sai: listas
+ * vazias, um alerta com o motivo e o batimento do coletor de WhatsApp (o único
+ * aviso de que o coletor do PC morreu) lido direto do cursor.
+ */
+export async function openItemsForDigest(
+  store: OpenItemsStore & { getCursor(source: string, key?: string): Promise<string | null> },
+  now: number
+): Promise<{ waitingYou: ConversationItem[]; waitingClient: ConversationItem[]; decisions: number; alerts: string[] }> {
+  try {
+    const items = await openItems(store, { now })
+    return { waitingYou: items.waitingYou, waitingClient: items.waitingClient, decisions: items.decisions.length, alerts: items.system.map((s) => s.message) }
+  } catch (e) {
+    console.error("[digest] pendências não carregaram", e)
+    const alerts = [`Pendências não carregaram: ${e instanceof Error ? e.message : String(e)}`]
+    try {
+      const beatMsg = heartbeatAlert(await store.getCursor("whatsapp", "heartbeat"), now)
+      if (beatMsg) alerts.push(beatMsg)
+    } catch {
+      // sem o batimento: só o alerta de falha
+    }
+    return { waitingYou: [], waitingClient: [], decisions: 0, alerts }
+  }
 }

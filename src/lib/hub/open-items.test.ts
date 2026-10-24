@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeEach } from "vitest"
+import { describe, it, expect, beforeEach, vi } from "vitest"
 import { MemoryHubStore } from "./memory-store"
 import { recordEvent } from "@/lib/events/record"
-import { openItems } from "./open-items"
+import { openItems, openItemsForDigest } from "./open-items"
+import { composeDigest } from "./daily-review"
 import type { EventKind } from "@/lib/events/types"
 
 const NOW = Date.parse("2026-10-24T15:00:00Z")
@@ -115,5 +116,29 @@ describe("sistema", () => {
     const s = (await run()).system
     expect(s.map((x) => x.key)).toEqual(["whatsapp-heartbeat", "cron:gmail-sync"])
     expect(s[1].message).toContain("gmail-sync")
+  })
+})
+
+describe("relógio adiantado do coletor", () => {
+  it("idade nunca é negativa", async () => {
+    await msg("gmail:t1", "email.received", -2 * H)
+    const r = await openItems(store, { now: NOW })
+    expect(r.waitingYou.map((x) => x.ageHours)).toEqual([0])
+  })
+})
+
+describe("openItemsForDigest", () => {
+  it("se as pendências falharem, o resumo sai com o alerta e o batimento do coletor", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    await store.setCursor("whatsapp", iso(30 * H), "heartbeat")
+    store.conversationEvents = async () => {
+      throw new Error("timeout")
+    }
+    const r = await openItemsForDigest(store, NOW)
+    expect(r.decisions).toBe(0)
+    expect(r.alerts[0]).toBe("Pendências não carregaram: timeout")
+    expect(r.alerts[1]).toContain("WhatsApp parado")
+    const d = composeDigest("2026-10-24", [], r.decisions, "https://crm.example", r.alerts)!
+    expect(d.html).toContain("Pendências não carregaram")
   })
 })
