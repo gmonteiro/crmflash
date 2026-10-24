@@ -22,10 +22,16 @@ function Pendencias() {
   // Dispensar pede o motivo num diálogo (nada de window.prompt).
   const [pending, setPending] = useState<{ c: ConversationItem; side: "client" | "lumeis" } | null>(null)
   const [reason, setReason] = useState("")
+  const [dismissError, setDismissError] = useState<string | null>(null)
 
   async function confirmDismiss() {
     if (!pending) return
-    await dismiss(pending.c, pending.side, reason.trim() || null)
+    setDismissError(null)
+    const r = await dismiss(pending.c, pending.side, reason.trim() || null)
+    if (!r.ok) {
+      setDismissError(`Não deu para dispensar: ${r.detail || "erro desconhecido"}`)
+      return
+    }
     setPending(null)
     setReason("")
   }
@@ -83,7 +89,12 @@ function Pendencias() {
         </Tabs>
       ) : null}
 
-      <Dialog open={!!pending} onOpenChange={(o) => !o && setPending(null)}>
+      <Dialog open={!!pending} onOpenChange={(o) => {
+          if (!o) {
+            setPending(null)
+            setDismissError(null)
+          }
+        }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{pending?.side === "client" ? "Já resolvi" : "Parar de esperar"}</DialogTitle>
@@ -92,8 +103,15 @@ function Pendencias() {
             {pending?.c.companyName}: {pending?.c.title}. Se chegar mensagem nova, a conversa volta para a lista.
           </p>
           <Textarea placeholder="Motivo (opcional)" value={reason} onChange={(e) => setReason(e.target.value)} />
+          {dismissError && <p className="text-sm text-destructive">{dismissError}</p>}
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setPending(null)}>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setPending(null)
+                setDismissError(null)
+              }}
+            >
               Cancelar
             </Button>
             <Button onClick={confirmDismiss}>Dispensar</Button>

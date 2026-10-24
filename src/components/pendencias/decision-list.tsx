@@ -15,6 +15,7 @@ export function DecisionList({ items, onDecide }: { items: DecisionItem[]; onDec
 
   async function run(id: string, body: DecideBody) {
     setBusy(id)
+    setMsg((m) => ({ ...m, [id]: "" }))
     const r = await onDecide(body)
     setBusy(null)
     if (!r.ok) setMsg((m) => ({ ...m, [id]: r.detail || "Não deu certo." }))

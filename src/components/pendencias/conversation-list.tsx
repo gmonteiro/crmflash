@@ -40,7 +40,7 @@ export function ConversationList({
             <div className="flex shrink-0 gap-2">
               {c.url && (
                 <Button asChild size="sm" variant="outline">
-                  <a href={c.url} target="_blank" rel="noreferrer">
+                  <a href={c.url} target="_blank" rel="noopener noreferrer">
                     Abrir
                   </a>
                 </Button>

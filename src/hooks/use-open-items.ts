@@ -38,8 +38,9 @@ export function useOpenItems() {
 
   const dismiss = useCallback(
     async (c: ConversationItem, side: "client" | "lumeis", reason: string | null) => {
-      await post("/api/pendencias/dismiss", { conversation_key: c.conversationKey, side, through: c.lastAt, reason })
-      await reload()
+      const r = await post("/api/pendencias/dismiss", { conversation_key: c.conversationKey, side, through: c.lastAt, reason })
+      if (r.ok) await reload()
+      return { ok: !!r.ok, detail: r.detail ?? (r as { error?: string }).error ?? "" }
     },
     [reload]
   )
