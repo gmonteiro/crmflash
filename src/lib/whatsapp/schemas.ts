@@ -1,4 +1,3 @@
-// src/lib/whatsapp/schemas.ts
 import { z } from "zod"
 
 // O candidato NÃO tem campo de mensagem: `.strict()` recusa qualquer coisa a mais.

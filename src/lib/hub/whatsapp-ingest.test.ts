@@ -1,4 +1,3 @@
-// src/lib/hub/whatsapp-ingest.test.ts
 import { describe, it, expect, beforeEach } from "vitest"
 import { MemoryHubStore } from "./memory-store"
 import { buildDirectory, openCandidates, recordDays } from "./whatsapp-ingest"

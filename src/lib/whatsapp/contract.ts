@@ -1,4 +1,3 @@
-// src/lib/whatsapp/contract.ts
 // O contrato entre o coletor local de WhatsApp e o CRM. Sem import nenhum:
 // o coletor (collectors/whatsapp) importa isto com `import type`.
 //

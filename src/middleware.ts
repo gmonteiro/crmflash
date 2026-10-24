@@ -19,6 +19,8 @@ const publicRoutes = [
   '/api/integration',
   '/api/mcp',
   '/api/cron/',
+  // Coletor local de WhatsApp: valida o token (hash) na própria rota.
+  '/api/hub/whatsapp/',
   '/.well-known/',
   '/api/oauth/',
 ]
