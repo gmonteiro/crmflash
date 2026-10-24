@@ -23,6 +23,8 @@ import type {
   PersonRow,
   ReviewRow,
   UpsertEventResult,
+  WhatsappDirectorySource,
+  WhatsappStore,
 } from "./store"
 
 // HubStore sobre o Supabase, com service role (o hub roda em cron, sem
@@ -98,7 +100,7 @@ const PERSON_COLS = "id, first_name, last_name, full_name, company_id, email"
 const CAL_COLS =
   "id, google_event_id, ical_uid, recurring_event_id, summary, start_at, end_at, status, organizer_email, attendees, html_link, meet_link, etag, google_created_at, transcription_meeting_id"
 
-export class SupabaseHubStore implements HubStore, DailyReviewStore {
+export class SupabaseHubStore implements HubStore, DailyReviewStore, WhatsappStore {
   constructor(
     private readonly db: SupabaseClient,
     readonly workspaceId: string,
@@ -587,6 +589,84 @@ export class SupabaseHubStore implements HubStore, DailyReviewStore {
     if (error) fail("openIdentityReviews", error)
     return count ?? 0
   }
+
+  // --- WhatsApp (025) -------------------------------------------------------
+
+  /** O PostgREST corta em 1000 linhas: pagina até acabar. */
+  private async allRows<T>(label: string, page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>) {
+    const out: T[] = []
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await page(from, from + 999)
+      if (error) fail(label, error as { message: string })
+      out.push(...(data ?? []))
+      if (!data || data.length < 1000) return out
+    }
+  }
+
+  async whatsappDirectorySource(): Promise<WhatsappDirectorySource> {
+    const [people, companies, phones, groups] = await Promise.all([
+      this.allRows<Row>("wa people", (a, b) =>
+        this.db.from("people").select("id, first_name, last_name, company_id").eq("workspace_id", this.workspaceId).range(a, b)
+      ),
+      this.allRows<Row>("wa companies", (a, b) =>
+        this.db
+          .from("companies")
+          .select("id, name, kanban_columns!inner(id)")
+          .eq("workspace_id", this.workspaceId)
+          .range(a, b)
+      ),
+      this.allRows<Row>("wa phones", (a, b) =>
+        this.db
+          .from("person_identities")
+          .select("value_norm, person_id, ignored")
+          .eq("workspace_id", this.workspaceId)
+          .eq("kind", "phone")
+          .range(a, b)
+      ),
+      this.allRows<Row>("wa groups", (a, b) =>
+        this.db.from("whatsapp_group_companies").select("group_id, company_id, ignored").eq("workspace_id", this.workspaceId).range(a, b)
+      ),
+    ])
+    return {
+      people: people.map((p) => ({
+        id: p.id as string,
+        fullName: `${(p.first_name as string) ?? ""} ${(p.last_name as string) ?? ""}`.trim(),
+        companyId: (p.company_id as string) ?? null,
+      })),
+      companies: companies.map((c) => ({ id: c.id as string, name: c.name as string })),
+      phones: phones.map((i) => ({
+        valueNorm: i.value_norm as string,
+        personId: (i.person_id as string) ?? null,
+        ignored: !!i.ignored,
+      })),
+      groups: groups.map((g) => ({
+        groupId: g.group_id as string,
+        companyId: (g.company_id as string) ?? null,
+        ignored: !!g.ignored,
+      })),
+    }
+  }
+
+  async whatsappGroupCompany(groupId: string) {
+    const { data, error } = await this.db
+      .from("whatsapp_group_companies")
+      .select("company_id, ignored")
+      .eq("workspace_id", this.workspaceId)
+      .eq("group_id", groupId)
+      .maybeSingle()
+    if (error) fail("whatsappGroupCompany", error)
+    return data ? { companyId: (data.company_id as string) ?? null, ignored: !!data.ignored } : null
+  }
+
+  async linkWhatsappGroup(groupId: string, groupName: string | null, companyId: string | null, ignored: boolean) {
+    const { error } = await this.db
+      .from("whatsapp_group_companies")
+      .upsert(this.ws({ group_id: groupId, group_name: groupName, company_id: companyId, ignored, source: "review" }), {
+        onConflict: "workspace_id,group_id",
+      })
+    if (error) fail("linkWhatsappGroup", error)
+  }
+
 
   async tappProjectCompany(projectId: string) {
     const { data, error } = await this.db

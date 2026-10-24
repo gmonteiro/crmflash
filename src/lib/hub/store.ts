@@ -287,3 +287,21 @@ export interface HubStore {
   getCursor(source: string, key?: string): Promise<string | null>
   setCursor(source: string, cursor: string | null, key?: string): Promise<void>
 }
+
+// --- WhatsApp (025) -------------------------------------------------------
+
+/** O cru que o diretório do coletor precisa; a normalização é do whatsapp-ingest. */
+export interface WhatsappDirectorySource {
+  people: { id: string; fullName: string; companyId: string | null }[]
+  /** Só as do funil (com estágio). */
+  companies: { id: string; name: string }[]
+  phones: { valueNorm: string; personId: string | null; ignored: boolean }[]
+  groups: { groupId: string; companyId: string | null; ignored: boolean }[]
+}
+
+export interface WhatsappStore {
+  whatsappDirectorySource(): Promise<WhatsappDirectorySource>
+  whatsappGroupCompany(groupId: string): Promise<{ companyId: string | null; ignored: boolean } | null>
+  /** Grava (ou troca) a ligação. companyId null + ignored = grupo não comercial. */
+  linkWhatsappGroup(groupId: string, groupName: string | null, companyId: string | null, ignored: boolean): Promise<void>
+}

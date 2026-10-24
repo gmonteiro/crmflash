@@ -24,6 +24,8 @@ import type {
   PersonRow,
   ReviewRow,
   UpsertEventResult,
+  WhatsappDirectorySource,
+  WhatsappStore,
 } from "./store"
 import type { Evidence, ParticipantRef } from "@/lib/events/types"
 
@@ -43,7 +45,7 @@ export interface MemoryCompany {
   lastClientEventAt?: string | null
 }
 
-export class MemoryHubStore implements HubStore, DailyReviewStore {
+export class MemoryHubStore implements HubStore, DailyReviewStore, WhatsappStore {
   readonly workspaceId = "ws-test"
 
   companies = new Map<string, MemoryCompany>()
@@ -231,6 +233,34 @@ export class MemoryHubStore implements HubStore, DailyReviewStore {
   async openIdentityReviews() {
     return [...this.reviews.values()].filter((r) => r.status === "open").length
   }
+
+  // --- WhatsApp ---
+  waGroups = new Map<string, { companyId: string | null; ignored: boolean; name: string | null }>()
+  /** Empresas do funil para o diretório (nos testes, o que o teste disser). */
+  funnelCompanyIds = new Set<string>()
+
+  async whatsappDirectorySource(): Promise<WhatsappDirectorySource> {
+    return {
+      people: [...this.people.values()].map((p) => ({ id: p.id, fullName: p.fullName, companyId: p.companyId })),
+      companies: [...this.companies.values()]
+        .filter((c) => this.funnelCompanyIds.has(c.id))
+        .map((c) => ({ id: c.id, name: c.name })),
+      phones: [...this.identities.values()]
+        .filter((i) => i.kind === "phone")
+        .map((i) => ({ valueNorm: i.valueNorm, personId: i.personId, ignored: i.ignored })),
+      groups: [...this.waGroups.entries()].map(([groupId, g]) => ({ groupId, companyId: g.companyId, ignored: g.ignored })),
+    }
+  }
+
+  async whatsappGroupCompany(groupId: string) {
+    const g = this.waGroups.get(groupId)
+    return g ? { companyId: g.companyId, ignored: g.ignored } : null
+  }
+
+  async linkWhatsappGroup(groupId: string, groupName: string | null, companyId: string | null, ignored: boolean) {
+    this.waGroups.set(groupId, { companyId, ignored, name: groupName })
+  }
+
 
   async tappProjectCompany(projectId: string) {
     return this.projects.get(projectId) ?? null
