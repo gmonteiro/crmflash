@@ -62,3 +62,57 @@ describe("resolveReview: contato só com nome", () => {
     expect(calls.some((c) => c.table === "person_identities")).toBe(false)
   })
 })
+
+describe("resolveReview: WhatsApp", () => {
+  const contato = {
+    id: "rev-wa",
+    reason: "whatsapp_contato",
+    status: "open",
+    company_id: null,
+    observed: { source: "whatsapp", phone: "+5521987654321", name: "João Silva" },
+  }
+  const grupo = {
+    id: "rev-g",
+    reason: "grupo_sem_empresa",
+    status: "open",
+    company_id: null,
+    observed: { source: "whatsapp", group_id: "120@g.us", group_name: "Lumeis <> Acme" },
+  }
+
+  it("ligar o contato grava o telefone como identidade confirmada", async () => {
+    const { resolveReview } = await import("./decisions")
+    const { client, calls } = fakeSupabase({ identity_reviews: [contato] })
+    const r = await resolveReview(client, CTX, "rev-wa", { type: "link_person", personId: "p-1" })
+    expect(r.ok).toBe(true)
+    expect(calls.find((c) => c.table === "person_identities")!.payload).toMatchObject({
+      person_id: "p-1",
+      ignored: false,
+      kind: "phone",
+      value_norm: "+5521987654321",
+      confidence: "confirmed",
+    })
+  })
+
+  it("ignorar o contato grava o telefone como ignorado", async () => {
+    const { resolveReview } = await import("./decisions")
+    const { client, calls } = fakeSupabase({ identity_reviews: [contato] })
+    await resolveReview(client, CTX, "rev-wa", { type: "ignore" })
+    expect(calls.find((c) => c.table === "person_identities")!.payload).toMatchObject({ person_id: null, ignored: true, kind: "phone" })
+  })
+
+  it("ligar o grupo grava whatsapp_group_companies; ignorar grava ignored", async () => {
+    const { resolveReview } = await import("./decisions")
+    let f = fakeSupabase({ identity_reviews: [grupo] })
+    await resolveReview(f.client, CTX, "rev-g", { type: "link_company", companyId: "co-1" })
+    expect(f.calls.find((c) => c.table === "whatsapp_group_companies")!.payload).toMatchObject({
+      workspace_id: "ws-1",
+      group_id: "120@g.us",
+      group_name: "Lumeis <> Acme",
+      company_id: "co-1",
+      ignored: false,
+    })
+    f = fakeSupabase({ identity_reviews: [grupo] })
+    await resolveReview(f.client, CTX, "rev-g", { type: "ignore" })
+    expect(f.calls.find((c) => c.table === "whatsapp_group_companies")!.payload).toMatchObject({ company_id: null, ignored: true })
+  })
+})

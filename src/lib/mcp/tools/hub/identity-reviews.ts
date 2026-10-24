@@ -16,7 +16,8 @@ export const listIdentityReviews: McpTool<typeof listInput> = {
   description:
     "A fila de casos que a resolução de identidade não decidiu sozinha: e-mail de domínio " +
     "desconhecido, homônimos na mesma empresa, e-mail pessoal (gmail etc.), reunião sem " +
-    "convite ou sem empresa, projeto do TranscriptionApp ainda sem empresa. Cada caso traz o que foi observado e os candidatos. Resolva " +
+    "convite ou sem empresa, projeto do TranscriptionApp ainda sem empresa, contato e grupo do " +
+    "WhatsApp (só nome e número; a mensagem fica no PC até você confirmar). Cada caso traz o que foi observado e os candidatos. Resolva " +
     "com resolve_identity.",
   input: listInput,
   async handler({ supabase }, { limit }) {
@@ -36,8 +37,8 @@ const resolveInput = z.object({
   action: z
     .enum(["link_person", "link_company", "create_company", "ignore"])
     .describe(
-      "link_person: o e-mail é desta pessoa. link_company: o domínio (ou a reunião, ou o " +
-        "projeto do TranscriptionApp) é desta empresa. create_company: cria a empresa com este " +
+      "link_person: o e-mail (ou o telefone do WhatsApp) é desta pessoa. link_company: o domínio " +
+        "(ou a reunião, o projeto do TranscriptionApp, o grupo do WhatsApp) é desta empresa. create_company: cria a empresa com este " +
         "domínio (ou para este projeto). ignore: não é contato comercial (projeto: é interno)."
     ),
   person_id: z.string().uuid().nullable().default(null),
