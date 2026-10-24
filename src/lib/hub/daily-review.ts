@@ -300,22 +300,43 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&
  * Ordem da spec: riscos, sugestões de estágio, fila de identidade, avanços.
  * Sem nada disso, null: não manda e-mail.
  */
+/** Sem batimento do coletor de WhatsApp há mais disto, o resumo avisa. */
+export const WHATSAPP_HEARTBEAT_MAX_MS = 24 * 60 * 60 * 1000
+
+export function heartbeatAlert(lastBeat: string | null, now: number): string | null {
+  if (!lastBeat) return null
+  if (now - Date.parse(lastBeat) <= WHATSAPP_HEARTBEAT_MAX_MS) return null
+  const when = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  })
+    .format(new Date(lastBeat))
+    .replace(",", "")
+  return `WhatsApp parado desde ${when}: confira o coletor no PC.`
+}
+
 export function composeDigest(
   today: string,
   rows: (DailyReviewRow & { companyName: string })[],
   openIdentity: number,
-  appUrl: string
+  appUrl: string,
+  alerts: string[] = []
 ): Digest | null {
   const risco = rows.filter((r) => r.verdict === "risco")
   const sugestoes = rows.filter((r) => r.stageSuggestion || r.nextStep)
   const avanco = rows.filter((r) => r.verdict === "avanco")
-  if (!risco.length && !sugestoes.length && !avanco.length && openIdentity === 0) return null
+  if (!alerts.length && !risco.length && !sugestoes.length && !avanco.length && openIdentity === 0) return null
 
   const card = (r: DailyReviewRow & { companyName: string }, extra = "") =>
     `<li><a href="${appUrl}/companies/${r.companyId}"><b>${esc(r.companyName)}</b></a>: ${esc(r.rationale)}${extra}</li>`
   const section = (title: string, items: string[]) => (items.length ? `<h3>${title}</h3><ul>${items.join("")}</ul>` : "")
 
   const html = [
+    alerts.length ? `<p style="color:#b91c1c"><b>${alerts.map(esc).join("<br/>")}</b></p>` : "",
     `<p>Revisão de ${today}. Nada aqui mudou o funil: estágio só muda quando você confirmar no copiloto.</p>`,
     section(`Riscos (${risco.length})`, risco.map((r) => card(r))),
     section(
@@ -337,7 +358,7 @@ export function composeDigest(
     avanco.length ? `${avanco.length} avanço${avanco.length > 1 ? "s" : ""}` : null,
   ].filter(Boolean)
   return {
-    subject: `CRM ${today}: ${parts.join(", ") || `${openIdentity} na fila`}`,
+    subject: `CRM ${today}: ${parts.join(", ") || (alerts.length ? "alerta do WhatsApp" : `${openIdentity} na fila`)}`,
     html,
     counts: { risco: risco.length, sugestoes: sugestoes.length, fila: openIdentity, avanco: avanco.length },
   }

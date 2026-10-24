@@ -3,7 +3,7 @@ import { getMessageMetadata, gmailProfileHistoryId, historyMessageIds, listMessa
 import { internalDomains } from "@/lib/identity/normalize"
 import { TranscriptionAppClient } from "@/lib/transcription/client"
 import { emptyStats, ingestGoogleEvent, relinkPending, type CalendarIngestStats } from "./calendar-ingest"
-import { ClaudeReviewer, composeDigest, runDailyReview, type DailyReviewStore } from "./daily-review"
+import { ClaudeReviewer, composeDigest, heartbeatAlert, runDailyReview, type DailyReviewStore } from "./daily-review"
 import { ClaudeExtractor } from "./extraction"
 import { syncGmail, type GmailSource } from "./gmail-ingest"
 import type { HubStore } from "./store"
@@ -87,7 +87,9 @@ export async function runDailyReviewAndDigest(store: HubStore & DailyReviewStore
   if (opts.companyId) return { ...review, digest: null }
 
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "https://crmflash.vercel.app").replace(/\/$/, "")
-  const digest = composeDigest(review.today, await store.reviewsOn(review.today), await store.openIdentityReviews(), appUrl)
+  // O coletor de WhatsApp roda no PC: se ele sumir, o resumo é o único aviso.
+  const alerts = [heartbeatAlert(await store.getCursor("whatsapp", "heartbeat"), Date.now())].filter((a): a is string => !!a)
+  const digest = composeDigest(review.today, await store.reviewsOn(review.today), await store.openIdentityReviews(), appUrl, alerts)
   const to = process.env.DIGEST_TO_EMAIL
   let sent: string | null = null
   if (digest && to && review.complete && (await store.getCursor("daily_digest")) !== review.today) {
