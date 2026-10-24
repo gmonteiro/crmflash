@@ -14,6 +14,9 @@ import type { HubStore } from "./store"
 //     dos destinatários de fora;
 //   - de fora → email.received (reseta, na data do e-mail) ou
 //     email.auto_reply (resposta automática, não reseta);
+//   - aviso do Google Agenda (Aceito:, Convite:, Cancelado:... ou calendar-notification@):
+//     entra com o mesmo kind, mas sem conversa (conversationKey nulo) e sem ação do
+//     cliente (D4); a agenda já entra pelo calendar-sync;
 //   - identidade pela escada; só e-mail RECEBIDO de domínio de empresa
 //     desconhecido abre caso na fila. Enviado e gmail/hotmail só ligam pelo
 //     que já é conhecido.
@@ -99,7 +102,7 @@ export async function ingestGmailMessage(
       direction: fromLumeis ? "outbound" : "inbound",
       title: fromLumeis ? `E-mail enviado: ${subject}` : `E-mail: ${subject}`,
       description: m.snippet || null,
-      facts: { autoReply: m.autoReply, fromClient: !fromLumeis },
+      facts: { autoReply: m.autoReply, calendarNotice: m.calendarNotice, fromClient: !fromLumeis },
       evidence: [
         {
           kind: "email",
@@ -110,7 +113,7 @@ export async function ingestGmailMessage(
         },
       ],
       participants,
-      conversationKey: `gmail:${m.threadId}`,
+      conversationKey: m.calendarNotice ? null : `gmail:${m.threadId}`,
     })
     stats.events++
   }

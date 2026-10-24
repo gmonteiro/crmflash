@@ -7,6 +7,7 @@ import type { EngagementFacts, EventKind } from "./types"
 const TABLE: [EventKind, EngagementFacts, boolean, string][] = [
   ["email.received", { fromClient: true }, true, "email.inbound_human"],
   ["email.received", { fromClient: true, autoReply: true }, false, "email.auto_reply"],
+  ["email.received", { fromClient: true, calendarNotice: true }, false, "email.calendar_notice"],
   ["email.received", { fromClient: false }, false, "email.inbound_not_client"],
   ["email.auto_reply", {}, false, "email.auto_reply"],
   ["email.sent", {}, false, "email.outbound"],

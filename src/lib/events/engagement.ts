@@ -30,6 +30,7 @@ export interface EngagementDecision {
 export function classifyEngagement(kind: EventKind, facts: EngagementFacts = {}): EngagementDecision {
   switch (kind) {
     case "email.received":
+      if (facts.calendarNotice) return { clientEngaged: false, rule: "email.calendar_notice" }
       if (facts.autoReply) return { clientEngaged: false, rule: "email.auto_reply" }
       if (facts.fromClient) return { clientEngaged: true, rule: "email.inbound_human" }
       return { clientEngaged: false, rule: "email.inbound_not_client" }

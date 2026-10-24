@@ -90,6 +90,8 @@ export interface EngagementFacts {
   heldWithInvite?: boolean
   /** Cabeçalho Auto-Submitted, X-Autoreply, assunto de ausência. */
   autoReply?: boolean
+  /** Aviso do Google Agenda por e-mail (RSVP, convite, cancelamento): D4, não é ação do cliente. */
+  calendarNotice?: boolean
   /** O remetente é identidade ou domínio do cliente. */
   fromClient?: boolean
 }
