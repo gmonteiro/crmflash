@@ -4,6 +4,12 @@ import { companyNameKey } from "@/lib/identity/normalize"
 import { personDedupKey } from "@/lib/import/dedup-key"
 import type {
   CalendarEventRow,
+  ConversationEventRow,
+  CursorRow,
+  DismissalRow,
+  OpenItemsStore,
+  OpenReviewItemRow,
+  ProposedInferenceRow,
   CompanyContext,
   CompanyRow,
   DomainRow,
@@ -45,7 +51,7 @@ export interface MemoryCompany {
   lastClientEventAt?: string | null
 }
 
-export class MemoryHubStore implements HubStore, DailyReviewStore, WhatsappStore {
+export class MemoryHubStore implements HubStore, DailyReviewStore, WhatsappStore, OpenItemsStore {
   readonly workspaceId = "ws-test"
 
   companies = new Map<string, MemoryCompany>()
@@ -434,6 +440,75 @@ export class MemoryHubStore implements HubStore, DailyReviewStore, WhatsappStore
     if (!row || !row.inferenceId) return false
     Object.assign(row, s)
     return true
+  }
+
+  // --- pendências ---
+  dismissalRows = new Map<string, DismissalRow>() // key|side
+  /** Quando cada cursor foi gravado, para a aba Sistema. */
+  cursorUpdatedAt = new Map<string, string>()
+
+  async conversationEvents(sinceISO: string): Promise<ConversationEventRow[]> {
+    return [...this.events.values()]
+      .filter((e) => e.conversationKey && e.occurredAt >= sinceISO)
+      .map((e) => ({
+        conversationKey: e.conversationKey!,
+        kind: e.kind,
+        clientEngaged: e.clientEngaged,
+        occurredAt: e.occurredAt,
+        companyId: e.companyId,
+        companyName: this.companies.get(e.companyId)?.name ?? "?",
+        title: e.title,
+        description: e.description,
+        url: e.evidence[0]?.url ?? null,
+      }))
+  }
+
+  async dismissals() {
+    return [...this.dismissalRows.values()]
+  }
+
+  async dismissConversation(d: DismissalRow & { reason: string | null; dismissedBy: string | null }) {
+    this.dismissalRows.set(`${d.conversationKey}|${d.side}`, {
+      conversationKey: d.conversationKey,
+      side: d.side,
+      dismissedThrough: d.dismissedThrough,
+    })
+  }
+
+  async openReviewItems(): Promise<OpenReviewItemRow[]> {
+    return [...this.reviews.values()]
+      .filter((r) => r.status === "open")
+      .map((r) => ({
+        id: r.id,
+        reason: r.reason,
+        observed: r.observed,
+        candidates: r.candidates,
+        companyId: r.companyId,
+        companyName: r.companyId ? this.companies.get(r.companyId)?.name ?? null : null,
+        createdAt: "",
+      }))
+  }
+
+  async proposedInferences(): Promise<ProposedInferenceRow[]> {
+    return [...this.inferences.values()]
+      .filter((i) => i.status === "proposed")
+      .map((i) => ({
+        id: i.id,
+        companyId: i.companyId,
+        companyName: this.companies.get(i.companyId)?.name ?? "?",
+        field: i.field,
+        value: i.value,
+        createdAt: "",
+      }))
+  }
+
+  async systemCursors(): Promise<CursorRow[]> {
+    return [...this.cursors.entries()]
+      .map(([k, cursor]) => {
+        const [source, key] = k.split("|")
+        return { source, key, cursor, updatedAt: this.cursorUpdatedAt.get(k) ?? "" }
+      })
+      .filter((c) => c.source === "cron" || c.source === "whatsapp")
   }
 
   async getCursor(source: string, key = "default") {

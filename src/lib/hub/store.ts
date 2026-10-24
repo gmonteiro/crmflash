@@ -306,3 +306,36 @@ export interface WhatsappStore {
   /** Grava (ou troca) a ligação. companyId null + ignored = grupo não comercial. */
   linkWhatsappGroup(groupId: string, groupName: string | null, companyId: string | null, ignored: boolean): Promise<void>
 }
+
+// --- pendências ---
+export interface ConversationEventRow {
+  conversationKey: string
+  kind: EventKind
+  clientEngaged: boolean
+  occurredAt: string
+  companyId: string
+  companyName: string
+  title: string
+  description: string | null
+  url: string | null
+}
+export interface DismissalRow { conversationKey: string; side: "client" | "lumeis"; dismissedThrough: string }
+export interface OpenReviewItemRow {
+  id: string
+  reason: string
+  observed: Record<string, unknown>
+  candidates: ReviewCandidate[]
+  companyId: string | null
+  companyName: string | null
+  createdAt: string
+}
+export interface ProposedInferenceRow { id: string; companyId: string; companyName: string; field: string; value: unknown; createdAt: string }
+export interface CursorRow { source: string; key: string; cursor: string | null; updatedAt: string }
+export interface OpenItemsStore {
+  conversationEvents(sinceISO: string): Promise<ConversationEventRow[]>
+  dismissals(): Promise<DismissalRow[]>
+  dismissConversation(d: DismissalRow & { reason: string | null; dismissedBy: string | null }): Promise<void>
+  openReviewItems(): Promise<OpenReviewItemRow[]>
+  proposedInferences(): Promise<ProposedInferenceRow[]>
+  systemCursors(): Promise<CursorRow[]>
+}
