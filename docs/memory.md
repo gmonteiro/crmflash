@@ -562,3 +562,14 @@ sem esse teto uma conta bagunçada monopoliza a fila inteira.
 - **Revisão diária (024, `/api/cron/daily-review`, tool `daily_review`):** contas de Contato a Aprovação. Sem evento novo desde a última revisão → `estagnacao` sem modelo. Com evento → Claude (effort low) dá avanço/estagnação/risco com ids de evidência, filtrados no servidor; estágio e próximo passo viram proposta. `daily_reviews` único por (empresa, dia). Resumo por `gmail.send` para `DIGEST_TO_EMAIL`, uma vez por dia (cursor `daily_digest`), só com risco, sugestão, avanço ou fila.
 - **Crons (Hobby dispara dentro da hora):** calendar 09:00, gmail 09:15, transcrições 09:30, revisão 11:00 UTC (08:00–09:00 em Brasília), para a revisão ler o que os syncs trouxeram.
 - **Escopos:** o refresh token precisa de `gmail.readonly` e `gmail.send` além do Calendar; o script agora pede os três por padrão.
+
+## 2026-10-23 — Fase 4: WhatsApp, leitor local só leitura
+
+- **Decisão (D2):** número pessoal do Gabriel como dispositivo vinculado (`whatsapp-web.js`, o mesmo mecanismo do `whatsapp-obsidian`), rodando no PC dele, em `collectors/whatsapp/`. Sem Coexistence. Risco aceito: a biblioteca não é oficial.
+- **Nada pessoal sai do PC:** o coletor baixa um diretório (`GET /api/hub/whatsapp/directory`) e casa as conversas na máquina. Conversa que não casa nunca é lida. Candidato (`POST /candidates`) leva só nome e número, ou nome do grupo; o schema é `.strict()` e recusa campo a mais.
+- **Só leitura por teste:** `readonly-guard.test.ts` falha se algum arquivo do coletor citar `sendMessage`, `sendSeen`, `markRead`, `reply` e afins. `fetchMessages` não marca como lida.
+- **Casamento:** 1:1 por telefone confirmado ou, na falta, pelo nome salvo na agenda (nome e sobrenome exatos, normalizados como no CRM, por import direto de `normalize.ts`). Grupo por ligação (`whatsapp_group_companies`, 025), pelo nome da empresa do funil dentro do nome do grupo, ou por participante com telefone confirmado. Resolver pela fila: `link_person` grava `person_identities(kind='phone')`; grupo vai para a 025.
+- **Evento:** um por conversa, por dia de São Paulo, por sentido. `sourceId = <chatKey>:<dia>`, versão = número de mensagens (o upsert atualiza o dia). `received` reseta pela regra `wa.inbound`; `sent` (inclusive colega da Lumeis em grupo, `WHATSAPP_INTERNAL_PHONES`) não reseta. O CRM revalida a ligação de cada evento e não confia na empresa que viria do coletor.
+- **Batimento:** todo `POST /events` (vazio, de hora em hora) grava o cursor `whatsapp/heartbeat`; o resumo diário avisa se passar de 24 h.
+- **Auth:** `Bearer WHATSAPP_COLLECTOR_TOKEN`; a Vercel guarda só `WHATSAPP_COLLECTOR_TOKEN_SHA256`. O token é gerado por `scripts/whatsapp-collector-token.mjs`, que o grava no `.env` do coletor e imprime só o hash.
+- **Limitação conhecida:** contato que o WhatsApp só expõe como `@lid`, sem número, é ignorado em 1:1.

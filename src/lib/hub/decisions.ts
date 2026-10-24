@@ -99,6 +99,11 @@ interface ReviewObserved {
   meeting_id?: string
   /** Contato revisado no TranscriptionApp (reviewed-fields.ts): a atividade da reunião. */
   activity_id?: string
+  /** WhatsApp: telefone E.164 (caso whatsapp_contato). */
+  phone?: string
+  /** WhatsApp: grupo (caso grupo_sem_empresa). */
+  group_id?: string
+  group_name?: string | null
 }
 
 /**
@@ -123,15 +128,17 @@ export async function resolveReview(
   if (review.status !== "open") return { ok: false, detail: `caso já está ${review.status}` }
   const obs = (review.observed ?? {}) as ReviewObserved
 
+  // A chave do caso: e-mail (Gmail, Calendar) ou telefone (WhatsApp).
+  const key = obs.email ? { kind: "email", value: obs.email } : obs.phone ? { kind: "phone", value: obs.phone } : null
   const identity = (personId: string | null, ignored: boolean) =>
     supabase.from("person_identities").upsert(
       {
         workspace_id: ctx.workspaceId,
         person_id: personId,
         ignored,
-        kind: "email",
-        value_norm: obs.email,
-        value_raw: obs.email,
+        kind: key!.kind,
+        value_norm: key!.value,
+        value_raw: key!.value,
         source: "review",
         confidence: "confirmed",
       },
@@ -142,15 +149,27 @@ export async function resolveReview(
       { workspace_id: ctx.workspaceId, domain: obs.domain, company_id: companyId, ignored, source: "review" },
       { onConflict: "workspace_id,domain" }
     )
+  const groupRow = (companyId: string | null, ignored: boolean) =>
+    supabase.from("whatsapp_group_companies").upsert(
+      {
+        workspace_id: ctx.workspaceId,
+        group_id: obs.group_id,
+        group_name: obs.group_name ?? null,
+        company_id: companyId,
+        ignored,
+        source: "review",
+      },
+      { onConflict: "workspace_id,group_id" }
+    )
 
   let write: { error: { message: string } | null } = { error: null }
   let detail = ""
 
   switch (resolution.type) {
     case "link_person": {
-      if (obs.email) {
+      if (key) {
         write = await identity(resolution.personId, false)
-        detail = `${obs.email} → pessoa ${resolution.personId}`
+        detail = `${key.value} → pessoa ${resolution.personId}`
       } else if (obs.activity_id) {
         // Contato só com nome (TranscriptionApp): não há chave para gravar;
         // a escolha liga a pessoa à reunião em que apareceu.
@@ -165,26 +184,32 @@ export async function resolveReview(
       break
     }
     case "link_company": {
+      if (obs.group_id) {
+        write = await groupRow(resolution.companyId, false)
+        detail = `grupo ${obs.group_name ?? obs.group_id} → empresa ${resolution.companyId}`
+        break
+      }
       if (!obs.domain) return { ok: false, detail: "o caso não tem domínio para ligar" }
       write = await domainRow(resolution.companyId, false)
       detail = `${obs.domain} → empresa ${resolution.companyId}`
       break
     }
     case "create_company": {
-      if (!obs.domain) return { ok: false, detail: "o caso não tem domínio" }
+      if (!obs.domain && !obs.group_id) return { ok: false, detail: "o caso não tem domínio" }
       const { data: created, error: cErr } = await supabase
         .from("companies")
-        .insert({ workspace_id: ctx.workspaceId, user_id: ctx.userId, name: resolution.name.trim(), domain: obs.domain })
+        .insert({ workspace_id: ctx.workspaceId, user_id: ctx.userId, name: resolution.name.trim(), domain: obs.domain ?? null })
         .select("id")
         .single()
       if (cErr) return { ok: false, detail: cErr.message }
-      write = await domainRow(created.id, false)
-      detail = `empresa "${resolution.name}" criada com ${obs.domain}`
+      write = obs.group_id ? await groupRow(created.id, false) : await domainRow(created.id, false)
+      detail = `empresa "${resolution.name}" criada${obs.group_id ? ` para o grupo ${obs.group_name ?? obs.group_id}` : ` com ${obs.domain}`}`
       break
     }
     case "ignore": {
-      if (review.reason === "dominio_desconhecido" && obs.domain) write = await domainRow(null, true)
-      else if (obs.email) write = await identity(null, true)
+      if (obs.group_id) write = await groupRow(null, true)
+      else if (review.reason === "dominio_desconhecido" && obs.domain) write = await domainRow(null, true)
+      else if (key) write = await identity(null, true)
       detail = "ignorado"
       break
     }

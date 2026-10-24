@@ -9,7 +9,7 @@ export default defineConfig({
   test: {
     // Só lógica pura por enquanto (derivações do pipeline). Componentes React
     // precisariam de jsdom + testing-library, que não estão instalados.
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.ts", "collectors/whatsapp/src/**/*.test.ts"],
     environment: "node",
   },
 })

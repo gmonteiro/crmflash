@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest"
 import { MemoryHubStore } from "./memory-store"
-import { composeDigest, runDailyReview, todayInSaoPaulo, type DailyVerdict, type Reviewer, type ReviewCompany } from "./daily-review"
+import { composeDigest, heartbeatAlert, runDailyReview, todayInSaoPaulo, type DailyVerdict, type Reviewer, type ReviewCompany } from "./daily-review"
 
 const NOW = Date.parse("2026-10-24T10:00:00Z") // 07:00 em Brasília
 const ACME: ReviewCompany = {
@@ -130,5 +130,21 @@ describe("resumo por e-mail", () => {
     expect(d.html).not.toContain(">C<")
 
     expect(composeDigest("2026-10-24", [rows[2]], 0, "https://crm.example")).toBeNull()
+  })
+})
+
+describe("alerta do WhatsApp", () => {
+  const NOW_ = Date.parse("2026-10-24T11:00:00Z")
+  it("sem batimento nenhum, não alerta (coletor ainda não instalado)", () => {
+    expect(heartbeatAlert(null, NOW_)).toBeNull()
+  })
+  it("batimento de 2 h, sem alerta; de 30 h, alerta com a data", () => {
+    expect(heartbeatAlert("2026-10-24T09:00:00Z", NOW_)).toBeNull()
+    expect(heartbeatAlert("2026-10-23T05:00:00Z", NOW_)).toBe("WhatsApp parado desde 23/10 02:00: confira o coletor no PC.")
+  })
+  it("alerta sozinho já faz o resumo sair, e vem antes de tudo", () => {
+    const d = composeDigest("2026-10-24", [], 0, "https://crm.example", ["WhatsApp parado desde 23/10 02:00: confira o coletor no PC."])!
+    expect(d.subject).toBe("CRM 2026-10-24: alerta do WhatsApp")
+    expect(d.html.indexOf("WhatsApp parado")).toBeLessThan(d.html.indexOf("Revisão de"))
   })
 })

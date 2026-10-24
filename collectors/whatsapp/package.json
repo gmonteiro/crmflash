@@ -1,0 +1,22 @@
+{
+  "name": "crmflash-whatsapp-collector",
+  "private": true,
+  "type": "module",
+  "description": "Leitor local, só leitura, do WhatsApp para o CRM Flash",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "libphonenumber-js": "^1.13.15",
+    "qrcode": "^1.5.4",
+    "whatsapp-web.js": "^1.34.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/qrcode": "^1.5.6",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
