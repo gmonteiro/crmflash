@@ -123,7 +123,7 @@ describe("resumo por e-mail", () => {
     ]
     const d = composeDigest("2026-10-24", rows, 2, "https://crm.example")!
     expect(d.subject).toBe("CRM 2026-10-24: 1 risco, 1 sugestão, 1 avanço")
-    const order = ["Riscos", "Sugestões", "Fila de identidade", "Avanços"].map((h) => d.html.indexOf(h))
+    const order = ["Riscos", "Sugestões", "Decisões abertas", "Avanços"].map((h) => d.html.indexOf(h))
     expect(order).toEqual([...order].sort((x, y) => x - y))
     expect(d.html).toContain("B &lt;x&gt;")
     expect(d.html).toContain('href="https://crm.example/companies/a"')
@@ -144,7 +144,48 @@ describe("alerta do WhatsApp", () => {
   })
   it("alerta sozinho já faz o resumo sair, e vem antes de tudo", () => {
     const d = composeDigest("2026-10-24", [], 0, "https://crm.example", ["WhatsApp parado desde 23/10 02:00: confira o coletor no PC."])!
-    expect(d.subject).toBe("CRM 2026-10-24: alerta do WhatsApp")
+    expect(d.subject).toBe("CRM 2026-10-24: alerta do sistema")
     expect(d.html.indexOf("WhatsApp parado")).toBeLessThan(d.html.indexOf("Revisão de"))
+  })
+})
+
+describe("resumo: pendências", () => {
+  const conv = (key: string, ageHours: number) => ({
+    conversationKey: key,
+    channel: "gmail" as const,
+    companyId: "a",
+    companyName: "Acme",
+    title: "E-mail: proposta",
+    preview: "pode mandar?",
+    url: null,
+    lastAt: "2026-10-23T10:00:00.000Z",
+    ageHours,
+  })
+
+  it("aguardando você sozinho já faz o e-mail sair, e vem antes dos riscos", () => {
+    const d = composeDigest("2026-10-24", [], 0, "https://crm.example", [], { waitingYou: [conv("gmail:t1", 30)], waitingClient: [] })!
+    expect(d.subject).toBe("CRM 2026-10-24: 1 aguardando você")
+    expect(d.html).toContain("Aguardando você (1)")
+    expect(d.html).toContain('href="https://crm.example/pendencias"')
+  })
+
+  it("ordem: sistema, aguardando você, aguardando o cliente, riscos", () => {
+    const rows = [
+      { companyId: "b", companyName: "B", reviewDate: "2026-10-24", verdict: "risco" as const, rationale: "sumiu", evidenceActivityIds: [], model: "m", promptVersion: "p", stageSuggestion: null, nextStep: null },
+    ]
+    const d = composeDigest("2026-10-24", rows, 3, "https://crm.example", ["WhatsApp parado"], {
+      waitingYou: [conv("gmail:t1", 30)],
+      waitingClient: [conv("gmail:t2", 200)],
+    })!
+    const order = ["WhatsApp parado", "Aguardando você", "Aguardando o cliente", "Riscos", "Decisões abertas"].map((h) => d.html.indexOf(h))
+    expect(order.every((i) => i >= 0)).toBe(true)
+    expect(order).toEqual([...order].sort((x, y) => x - y))
+  })
+
+  it("escapa nome, título e prévia", () => {
+    const c = { ...conv("gmail:t1", 30), companyName: "A<b>", title: "x&y", preview: "<script>" }
+    const d = composeDigest("2026-10-24", [], 0, "https://crm.example", [], { waitingYou: [c], waitingClient: [] })!
+    expect(d.html).not.toContain("<script>")
+    expect(d.html).toContain("A&lt;b&gt;")
   })
 })
