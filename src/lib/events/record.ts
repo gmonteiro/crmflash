@@ -44,6 +44,7 @@ export async function recordEvent(store: HubStore, input: HubEventInput): Promis
     sourceAppUrl: input.sourceAppUrl ?? null,
     summary: input.summary ?? null,
     transcript: input.transcript ?? null,
+    conversationKey: input.conversationKey ?? null,
     processorVersion: PROCESSOR_VERSION,
   })
 

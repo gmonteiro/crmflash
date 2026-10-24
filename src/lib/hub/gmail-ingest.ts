@@ -110,6 +110,7 @@ export async function ingestGmailMessage(
         },
       ],
       participants,
+      conversationKey: `gmail:${m.threadId}`,
     })
     stats.events++
   }

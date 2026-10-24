@@ -114,6 +114,7 @@ export interface EventRow {
   summary: unknown
   transcript: string | null
   processorVersion: string
+  conversationKey: string | null
 }
 
 export interface UpsertEventResult {

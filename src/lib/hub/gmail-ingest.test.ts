@@ -41,6 +41,7 @@ describe("e-mail → evento", () => {
       clientEngaged: true,
       engagementRule: "email.inbound_human",
       occurredAt: "2026-10-20T14:30:00.000Z",
+      conversationKey: "gmail:t-m1",
     })
     expect(store.companies.get(ACME)!.lastClientEventAt).toBe("2026-10-20T14:30:00.000Z")
     expect(store.people.size).toBe(1)

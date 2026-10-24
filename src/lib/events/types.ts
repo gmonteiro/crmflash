@@ -70,6 +70,8 @@ export interface HubEventInput {
   sourceAppUrl?: string | null
   summary?: unknown
   transcript?: string | null
+  /** Conversa de mensagem (e-mail por thread, WhatsApp por chat): a base de "sem retorno". */
+  conversationKey?: string | null
 }
 
 export interface EngagementFacts {

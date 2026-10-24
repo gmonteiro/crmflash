@@ -309,6 +309,7 @@ export class SupabaseHubStore implements HubStore, DailyReviewStore, WhatsappSto
       summary: row.summary,
       transcript: row.transcript,
       processor_version: row.processorVersion,
+      conversation_key: row.conversationKey,
     })
 
     const existing = await this.eventByKey(row.idempotencyKey)
