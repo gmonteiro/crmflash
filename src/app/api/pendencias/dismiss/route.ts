@@ -19,7 +19,8 @@ export async function POST(request: Request) {
   await s.store.dismissConversation({
     conversationKey: parsed.data.conversation_key,
     side: parsed.data.side,
-    dismissedThrough: parsed.data.through,
+    // Limita a agora: dispensa futura esconderia a mensagem nova que traz a conversa de volta.
+    dismissedThrough: new Date(Math.min(Date.parse(parsed.data.through), Date.now())).toISOString(),
     reason: parsed.data.reason,
     dismissedBy: s.userId,
   })

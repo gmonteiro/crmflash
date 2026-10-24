@@ -26,15 +26,20 @@ export async function POST(request: Request) {
   const ctx = { workspaceId: s.workspaceId, userId: s.userId }
 
   if (parsed.data.type === "inference") {
-    const { data: inf } = await s.supabase.from("inferences").select("field").eq("id", parsed.data.id).maybeSingle()
+    const { data: inf, error } = await s.supabase.from("inferences").select("field").eq("id", parsed.data.id).maybeSingle()
+    // A guarda falha fechada: sem ler a proposta, não decide nada.
+    if (error) return NextResponse.json({ ok: false, detail: "Falha ao ler a proposta." }, { status: 500 })
+    if (!inf) return NextResponse.json({ ok: false, detail: "Proposta não encontrada." }, { status: 404 })
     if (inf?.field === "stage_suggestion" && parsed.data.decision === "accept") {
       return NextResponse.json({ ok: false, detail: "Sugestão de estágio se aceita no copiloto da conta." }, { status: 400 })
     }
     return NextResponse.json(await decideInference(s.supabase, ctx, parsed.data.id, parsed.data.decision))
   }
 
-  const { data: rev } = await s.supabase.from("identity_reviews").select("observed").eq("id", parsed.data.id).maybeSingle()
-  const obs = (rev?.observed ?? {}) as { project_id?: string; meeting_id?: string }
+  const { data: rev, error } = await s.supabase.from("identity_reviews").select("observed").eq("id", parsed.data.id).maybeSingle()
+  if (error) return NextResponse.json({ ok: false, detail: "Falha ao ler o caso." }, { status: 500 })
+  if (!rev) return NextResponse.json({ ok: false, detail: "Caso não encontrado." }, { status: 404 })
+  const obs = (rev.observed ?? {}) as { project_id?: string; meeting_id?: string }
   if (obs.project_id || obs.meeting_id) {
     return NextResponse.json({ ok: false, detail: "Projeto e reunião se resolvem no claude.ai (resolve_identity), que reprocessa as transcrições." }, { status: 400 })
   }

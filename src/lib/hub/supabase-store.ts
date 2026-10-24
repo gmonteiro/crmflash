@@ -933,8 +933,6 @@ export class SupabaseHubStore implements HubStore, DailyReviewStore, WhatsappSto
     return (data ?? []).length > 0
   }
 
-  // --- cursores -----------------------------------------------------------
-
   // --- pendências (026) ----------------------------------------------------
 
   async conversationEvents(sinceISO: string): Promise<ConversationEventRow[]> {
@@ -945,6 +943,8 @@ export class SupabaseHubStore implements HubStore, DailyReviewStore, WhatsappSto
         .eq("workspace_id", this.workspaceId)
         .not("conversation_key", "is", null)
         .gte("occurred_at", sinceISO)
+        .order("occurred_at")
+        .order("id")
         .range(a, b)
     )
     return rows.map((r) => {
@@ -1052,6 +1052,7 @@ export class SupabaseHubStore implements HubStore, DailyReviewStore, WhatsappSto
     }))
   }
 
+  // --- cursores -----------------------------------------------------------
 
   async getCursor(source: string, key = "default") {
     const { data, error } = await this.db
