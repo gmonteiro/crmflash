@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Coletor de WhatsApp: pacote próprio, fora do Next.
+    "collectors/**",
   ]),
 ]);
 
